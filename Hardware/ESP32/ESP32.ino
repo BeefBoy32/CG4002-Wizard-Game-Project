@@ -11,6 +11,8 @@ MPU6050 mpu;
 volatile bool mpuInterrupt = false;
 uint16_t packetSize;
 uint8_t fifoBuffer[64];
+VectorInt16 laBias = {0,0,0};
+int N = 500; // number of samples (~0.5s if 1kHz DMP)
 struct MpuPacket {
     uint8_t data[64]; // DMP packet size
 };
@@ -45,8 +47,72 @@ void getLinearAccelInWorld(VectorInt16 *v, VectorInt16 *vReal, Quaternion *q) {
         az * (1 - 2*x*x - 2*y*y)
     );
 }
-VectorInt16 laBias = {0,0,0};
-int N = 500; // number of samples (~0.5s if 1kHz DMP)
+
+void read_MPU_data() {
+  while (!mpuQueue.empty()) {
+    MpuPacket pkt = mpuQueue.front();
+    mpuQueue.pop();
+    Quaternion q;  // [w, x, y, z]
+    VectorFloat gravity;
+    float ypr[3];  // [yaw, pitch, roll]
+    VectorInt16 accel;
+    VectorInt16 accelReal;
+    VectorInt16 accelWorld;
+    mpu.dmpGetQuaternion(&q, pkt.data);
+    mpu.dmpGetGravity(&gravity, &q);
+    mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
+    mpu.dmpGetAccel(&accel, pkt.data);
+    mpu.dmpGetLinearAccel(&accelReal , &accel, &gravity);
+    accelReal.x -= laBias.x;
+    accelReal.y -= laBias.y;
+    accelReal.z -= laBias.z;
+    getLinearAccelInWorld(&accelWorld, &accelReal, &q);
+    
+    float x_acc = accel.x / ACCEL_SENS;
+    float y_acc = accel.y / ACCEL_SENS;
+    float z_acc = accel.z / ACCEL_SENS;
+    
+    float x_racc = accelReal.x / ACCEL_SENS;
+    float y_racc = accelReal.y / ACCEL_SENS;
+    float z_racc = accelReal.z / ACCEL_SENS;
+    
+    float x_wacc = accelWorld.x / ACCEL_SENS;
+    float y_wacc = accelWorld.y / ACCEL_SENS;
+    float z_wacc = accelWorld.z / ACCEL_SENS;
+    
+    /*
+    // Output YPR + accelerometer
+    Serial.print("YPR: ");
+    Serial.print(ypr[0] * 180 / M_PI);
+    Serial.print(", ");
+    Serial.print(ypr[1] * 180 / M_PI);
+    Serial.print(", ");
+    Serial.print(ypr[2] * 180 / M_PI);
+    Serial.print(" | ");
+    
+    Serial.print("Acc: ");
+    Serial.print(x_acc);
+    Serial.print(", ");
+    Serial.print(y_acc);
+    Serial.print(", ");
+    Serial.println(z_acc);
+    
+    Serial.print("Real Acc: ");
+    Serial.print(x_racc, 6);
+    Serial.print(", ");
+    Serial.print(y_racc, 6);
+    Serial.print(", ");
+    Serial.println(z_racc, 6);
+    */
+    
+    Serial.print("World Acc: ");
+    Serial.print(x_wacc);
+    Serial.print(", ");
+    Serial.print(y_wacc);
+    Serial.print(", ");
+    Serial.println(z_wacc); 
+  }
+}
 
 void IRAM_ATTR dmpDataReady() {
     mpuInterrupt = true;
@@ -148,70 +214,8 @@ void loop() {
      */
     
     // Get fused orientation
-    while (!mpuQueue.empty()) {
-        MpuPacket pkt = mpuQueue.front();
-        mpuQueue.pop();
-        Quaternion q;  // [w, x, y, z]
-        VectorFloat gravity;
-        float ypr[3];  // [yaw, pitch, roll]
-        VectorInt16 accel;
-        VectorInt16 accelReal;
-        VectorInt16 accelWorld;
-        mpu.dmpGetQuaternion(&q, pkt.data);
-        mpu.dmpGetGravity(&gravity, &q);
-        mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
-        mpu.dmpGetAccel(&accel, pkt.data);
-        mpu.dmpGetLinearAccel(&accelReal , &accel, &gravity);
-        accelReal.x -= laBias.x;
-        accelReal.y -= laBias.y;
-        accelReal.z -= laBias.z;
-        getLinearAccelInWorld(&accelWorld, &accelReal, &q);
-        
-        float x_acc = accel.x / ACCEL_SENS;
-        float y_acc = accel.y / ACCEL_SENS;
-        float z_acc = accel.z / ACCEL_SENS;
-
-        float x_racc = accelReal.x / ACCEL_SENS;
-        float y_racc = accelReal.y / ACCEL_SENS;
-        float z_racc = accelReal.z / ACCEL_SENS;
-
-        float x_wacc = accelWorld.x / ACCEL_SENS;
-        float y_wacc = accelWorld.y / ACCEL_SENS;
-        float z_wacc = accelWorld.z / ACCEL_SENS;
-
-        /*
-        // Output YPR + accelerometer
-        Serial.print("YPR: ");
-        Serial.print(ypr[0] * 180 / M_PI);
-        Serial.print(", ");
-        Serial.print(ypr[1] * 180 / M_PI);
-        Serial.print(", ");
-        Serial.print(ypr[2] * 180 / M_PI);
-        Serial.print(" | ");
+    read_MPU_data();
     
-        Serial.print("Acc: ");
-        Serial.print(x_acc);
-        Serial.print(", ");
-        Serial.print(y_acc);
-        Serial.print(", ");
-        Serial.println(z_acc);
-
-        Serial.print("Real Acc: ");
-        Serial.print(x_racc);
-        Serial.print(", ");
-        Serial.print(y_racc);
-        Serial.print(", ");
-        Serial.println(z_racc);
-        */
-        
-        Serial.print("World Acc: ");
-        Serial.print(x_wacc);
-        Serial.print(", ");
-        Serial.print(y_wacc);
-        Serial.print(", ");
-        Serial.println(z_wacc);
-        
-    }
     Serial.println("Releasing Button");
   }
 
