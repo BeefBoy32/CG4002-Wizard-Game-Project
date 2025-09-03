@@ -45,6 +45,8 @@ void getLinearAccelInWorld(VectorInt16 *v, VectorInt16 *vReal, Quaternion *q) {
         az * (1 - 2*x*x - 2*y*y)
     );
 }
+VectorInt16 laBias = {0,0,0};
+int N = 500; // number of samples (~0.5s if 1kHz DMP)
 
 void IRAM_ATTR dmpDataReady() {
     mpuInterrupt = true;
@@ -54,7 +56,6 @@ void IRAM_ATTR dmpDataReady() {
 Button myButton(D7, 50);
 bool isButtonHeld;
 bool isButtonReleased;
-
 
 void setup() {
   Serial.begin(115200);
@@ -71,8 +72,6 @@ void setup() {
     mpu.CalibrateAccel(6);
     mpu.CalibrateGyro(6);
     mpu.PrintActiveOffsets();
-    mpu.setDMPEnabled(true);
-    dmpReady = true;
     packetSize = mpu.dmpGetFIFOPacketSize();
   } else {
     dmpReady = false;
@@ -81,6 +80,41 @@ void setup() {
     Serial.println(")");
   }
   attachInterrupt(digitalPinToInterrupt(MPU_INT_PIN), dmpDataReady, RISING);
+  mpu.setDMPEnabled(true);
+  long real_accelx = 0;
+  long real_accely = 0;
+  long real_accelz = 0;
+  for (int i = 0; i < N; i += 0) {
+    if (mpuInterrupt) {
+      mpuInterrupt = false;
+      uint16_t fifoCount = mpu.getFIFOCount();
+      if (fifoCount >= packetSize) {
+        MpuPacket pkt;
+        mpu.getFIFOBytes(pkt.data, packetSize);
+        Quaternion q;  // [w, x, y, z]
+        VectorFloat gravity;
+        float ypr[3];  // [yaw, pitch, roll]
+        VectorInt16 accel;
+        VectorInt16 accelReal;
+        mpu.dmpGetQuaternion(&q, pkt.data);
+        mpu.dmpGetGravity(&gravity, &q);
+        mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
+        mpu.dmpGetAccel(&accel, pkt.data);
+        mpu.dmpGetLinearAccel(&accelReal , &accel, &gravity);
+        real_accelx += (long) accelReal.x;
+        real_accely += (long) accelReal.y;
+        real_accelz += (long) accelReal.z;
+        Serial.println(accelReal.z);
+        i++;
+      }
+    }
+  }
+  mpu.setDMPEnabled(false);
+  // Compute average bias
+  laBias.x = (int16_t) (real_accelx / N);
+  laBias.y = (int16_t) (real_accely / N);;
+  laBias.z = (int16_t) (real_accelz / N);;
+  Serial.println(laBias.z);
 }
 
 void loop() {
@@ -128,6 +162,11 @@ void loop() {
         mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
         mpu.dmpGetAccel(&accel, pkt.data);
         mpu.dmpGetLinearAccel(&accelReal , &accel, &gravity);
+        accelReal.x -= laBias.x;
+        accelReal.y -= laBias.y;
+        accelReal.z -= laBias.z;
+        getLinearAccelInWorld(&accelWorld, &accelReal, &q);
+        
         float x_acc = accel.x / ACCEL_SENS;
         float y_acc = accel.y / ACCEL_SENS;
         float z_acc = accel.z / ACCEL_SENS;
@@ -135,7 +174,12 @@ void loop() {
         float x_racc = accelReal.x / ACCEL_SENS;
         float y_racc = accelReal.y / ACCEL_SENS;
         float z_racc = accelReal.z / ACCEL_SENS;
-        
+
+        float x_wacc = accelWorld.x / ACCEL_SENS;
+        float y_wacc = accelWorld.y / ACCEL_SENS;
+        float z_wacc = accelWorld.z / ACCEL_SENS;
+
+        /*
         // Output YPR + accelerometer
         Serial.print("YPR: ");
         Serial.print(ypr[0] * 180 / M_PI);
@@ -158,6 +202,15 @@ void loop() {
         Serial.print(y_racc);
         Serial.print(", ");
         Serial.println(z_racc);
+        */
+        
+        Serial.print("World Acc: ");
+        Serial.print(x_wacc);
+        Serial.print(", ");
+        Serial.print(y_wacc);
+        Serial.print(", ");
+        Serial.println(z_wacc);
+        
     }
     Serial.println("Releasing Button");
   }
