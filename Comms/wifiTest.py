@@ -4,7 +4,7 @@ import paho.mqtt.client as mqtt
 def on_connect(client, userdata, flags, rc):
     if rc == 0:
         print("Connected to broker")
-        client.subscribe("esp32/test")  # same topic ESP32 publishes to
+        client.subscribe("wand/mpu")  # same topic ESP32 publishes to
     else:
         print(f"Failed to connect, rc={rc}")
 

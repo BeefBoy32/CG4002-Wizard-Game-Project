@@ -15,33 +15,32 @@ void setup() {
 }
 
 void loop() {
-  /*
+  
   // put your main code here, to run repeatedly:
-  for(int dutyCycle = 0; dutyCycle < 8; dutyCycle++){   
+  for(int dutyCycle = 0; dutyCycle < 256; dutyCycle++){   
     // changing the LED brightness with PWM
     ledcWrite(RED_PIN, dutyCycle);
-    delay(500);
+    delay(15);
   }
   ledcWrite(RED_PIN, 0);
-  delay(500);
+  delay(15);
   
-  for(int dutyCycle = 0; dutyCycle < 8; dutyCycle++){   
+  for(int dutyCycle = 0; dutyCycle < 256; dutyCycle++){   
     // changing the LED brightness with PWM
     ledcWrite(GREEN_PIN, dutyCycle);
-    delay(500);
+    delay(15);
   }
   ledcWrite(GREEN_PIN, 0);
-  delay(500);
+  delay(15);
   
-  for(int dutyCycle = 0; dutyCycle < 8; dutyCycle++){   
+  for(int dutyCycle = 0; dutyCycle < 256; dutyCycle++){   
     // changing the LED brightness with PWM
     ledcWrite(BLUE_PIN, dutyCycle);
-    delay(500);
+    delay(15);
   }
   ledcWrite(BLUE_PIN, 0);
-  delay(500);
-  */
-
+  delay(15);
+  /*
   //Ratio for purple is 1:2
   for(int dutyCycle = 0; dutyCycle < 128; dutyCycle++){   
     // changing the LED brightness with PWM
@@ -62,4 +61,5 @@ void loop() {
   ledcWrite(GREEN_PIN, 0);
   ledcWrite(RED_PIN, 0);
   delay(20);
+  */
 }

@@ -1,6 +1,5 @@
 #include "Wire.h"
-#include "I2Cdev.h"
-#include "MPU6050_6Axis_MotionApps20.h"
+#include <MPU6050_6Axis_MotionApps20.h>
 #include <Button.h>
 #include <queue>
 #include <WiFi.h>
@@ -287,6 +286,7 @@ void setup() {
   laBias.y = (int16_t) (real_accely / N);
   laBias.z = (int16_t) (real_accelz / N);
   mpu.setDMPEnabled(true);
+  
 }
 
 void loop() {
