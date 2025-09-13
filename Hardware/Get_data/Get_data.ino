@@ -4,6 +4,7 @@
 #include <queue>
 #include <WiFi.h>
 #include <PubSubClient.h>
+#include <LEDControl.h>
 
 //Global Variables
 bool drawingMode = true;
@@ -40,6 +41,9 @@ Button myButton(D7, 50);
 bool isButtonHeld;
 bool isButtonReleased;
 
+
+//LED 
+LEDControl ledControl(D2, D3, D4, 5000, 8);
 
 void setup_wifi()
 {
@@ -220,6 +224,11 @@ void IRAM_ATTR dmpDataReady() {
 
 void setup() {
   Serial.begin(115200);
+
+  ledControl.initializeLED();
+  delay(2000);
+  ledControl.on_initialize_light();
+  
   myButton.InitializeButton();
   Serial.println("Button initialized");
   
@@ -283,6 +292,7 @@ void setup() {
   */
   setup_wifi();
   client.setServer(mqtt_server, mqtt_port);
+  ledControl.off_light();
 }
 
 void loop() {
