@@ -1,0 +1,4 @@
+[req]
+distinguished_name=req
+[v3_req]
+subjectAltName=IP:172.20.10.5
