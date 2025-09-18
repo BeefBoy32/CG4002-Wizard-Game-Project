@@ -35,6 +35,7 @@ struct MpuPacket {
 };
 std::queue<MpuPacket> mpuQueue;
 bool dmpReady;
+int mpuCount = 0;
 
 // Wand Button
 Button myButton(D7, 50);
@@ -235,7 +236,7 @@ void setup() {
   // Initialize MPU6050
   Wire.begin();
   // Cheap board used, testConnection will not work, but still able to receive correct data
-  if (mpu.testConnection()) Serial.println("MPU6050 connection successful");
+  // if (mpu.testConnection()) Serial.println("MPU6050 connection successful");
  
   uint8_t devStatus = mpu.dmpInitialize();
   delay(2000); // Let mgyro and accelerometer reading stabilise
@@ -302,7 +303,7 @@ void loop() {
   isButtonHeld = myButton.CheckHold();
   
   if (myButton.IsInitialHold()){
-    Serial.println("Holding Button");
+    //Serial.println("Holding Button");
 
     // Enable DMP Interrupt to constantly get DMP readings
     mpu.resetFIFO();
@@ -320,18 +321,20 @@ void loop() {
       }
     }
     */
-    for (int i = 0; i < 300; i += 0)
+    for (int i = 0; i < 60; i += 0)
     {
-      if (mpuInterrupt) {
-        mpuInterrupt = false;
-        uint16_t fifoCount = mpu.getFIFOCount();
+      mpuInterrupt = false;
+      uint16_t fifoCount = mpu.getFIFOCount();
+      if (fifoCount >= packetSize) {
         MpuPacket pkt;
-        while (fifoCount >= packetSize) {
-          mpu.getFIFOBytes(pkt.data, packetSize);
-          fifoCount -= packetSize;
+        mpu.getFIFOBytes(pkt.data, packetSize);
+        if (mpuCount == 5) {
+          publish_MPU_data(pkt);
+          mpuCount = 0;
+          i += 1;
+        } else {
+          mpuCount += 1;
         }
-        i += 1;
-        publish_MPU_data(pkt);
       }
     }
     
@@ -347,7 +350,7 @@ void loop() {
     // read_MPU_data();
     // Send fused orientation
     // send_MPU_data();
-    Serial.println("Releasing Button");
+    // Serial.println("Releasing Button");
     // mpu.resetFIFO();
     // mpu.setDMPEnabled(true);     
   }

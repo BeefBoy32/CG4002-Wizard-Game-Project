@@ -12,9 +12,21 @@ def on_connect(client, userdata, flags, rc):
 def on_message(client, userdata, msg):
     print(f"Received message on topic {msg.topic}: {msg.payload.decode()}")
 
+# KW
 # Replace with your laptop IP if ESP32 connects using it
 broker_address = "172.20.10.4"  # example: laptop IP
 broker_port = 1883
+'''
+# Shree
+broker_address = "172.20.10.5"  # example: laptop IP
+broker_port = 1883
+
+'''
+'''
+CK
+broker_address = "172.20.10.5"  # example: laptop IP
+broker_port = 1883
+'''
 
 # Create MQTT client
 client = mqtt.Client("LaptopSubscriber")
