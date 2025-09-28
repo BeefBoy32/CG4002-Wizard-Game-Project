@@ -5,11 +5,12 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <LEDControl.h>
-
+#include <ArduinoJson.h>
 
 // GLOBAL VARIABLES
-bool drawingMode = true; // When true, send MPU data to Ultra96, else detect if there is spinning and thrusting to cast the spell
+volatile bool drawingMode = true; // When true, send MPU data to Ultra96, else detect if there is spinning and thrusting to cast the spell
 int spinCount = 0;
+Colour spellColour = RED;
 
 // Wi-Fi credentials
 #define WAND true // True if Wand 1, False if Wand 2
@@ -25,7 +26,8 @@ const char* mqtt_server = "172.20.10.5"; // replace with your laptop's IP
 */
 const int mqtt_port = 1883;
 const char* TOP_MPU = "wand/mpu";
-const char* TOP_STATUS = "wand/status";
+const char* TOP_CAST = "wand/cast";
+const char* TOP_SPELL = "wand/spell";
 WiFiClient espClient;
 PubSubClient client(espClient);
 
@@ -56,16 +58,16 @@ bool isButtonReleased;
 LEDControl ledControl(D2, D3, D4, 5000, 8);
 
 int calcStrength(int n) {
-  if (n < 5) {
+  if (n < 50) {
     return 1;
   }
-  if (n < 10){
+  if (n < 100){
     return 2;
   }
-  if (n < 15) {
+  if (n < 150) {
     return 3;
   }
-  if (n < 20) {
+  if (n < 200) {
     return 4;
   }
   return 5;
@@ -92,6 +94,7 @@ void reconnect()
     if (client.connect("ESP32Client"))
     {
       Serial.println("connected");
+      client.subscribe(TOP_SPELL);
     }
     else
     {
@@ -102,34 +105,35 @@ void reconnect()
   }
 }
 
-void getLinearAccelInWorld(VectorInt16 *v, VectorInt16 *vReal, Quaternion *q) {
-    float ax = (float)vReal->x;
-    float ay = (float)vReal->y;
-    float az = (float)vReal->z;
+void callback(char* topic, byte* payload, unsigned int length) {
+  // Convert payload to String
+  String message;
+  for (unsigned int i = 0; i < length; i++) {
+    message += (char)payload[i];
+  }
+  Serial.print("Message received: ");
+  Serial.println(message);
 
-    float w = q->w;
-    float x = q->x;
-    float y = q->y;
-    float z = q->z;
+  // Parse JSON
+  DynamicJsonDocument doc(1024);
+  DeserializationError error = deserializeJson(doc, message);
+  if (!error) {
+    spellColour = (Colour) doc["spell"].as<int>();
+    Serial.print("Spell Colour: ");
+    Serial.println(colourToString(spellColour));
+    drawingMode = false;
+    mpu.resetFIFO();
+    mpuInterrupt = false;
+    ledControl.on_spell_light(spellColour, calcStrength(spinCount));
+  } else {
+    Serial.print("JSON parsing failed: ");
+    Serial.println(error.c_str());
+  }
+}
 
-    // Rotation matrix multiply
-    v->x = (int16_t)(
-        ax * (1 - 2*y*y - 2*z*z) +
-        ay * (2*x*y - 2*w*z) +
-        az * (2*x*z + 2*w*y)
-    );
-
-    v->y = (int16_t)(
-        ax * (2*x*y + 2*w*z) +
-        ay * (1 - 2*x*x - 2*z*z) +
-        az * (2*y*z - 2*w*x)
-    );
-
-    v->z = (int16_t)(
-        ax * (2*x*z - 2*w*y) +
-        ay * (2*y*z + 2*w*x) +
-        az * (1 - 2*x*x - 2*y*y)
-    );
+void publish_cast_data(int strength) {
+  String js =  String("{\"strength\":") + String(strength) + "}";
+  client.publish(TOP_CAST, js.c_str(), true);
 }
 
 void publish_MPU_data(const MpuPacket pkt) {
@@ -252,6 +256,7 @@ void setup() {
   */
   setup_wifi();
   client.setServer(mqtt_server, mqtt_port);
+  client.setCallback(callback);
   if (!client.connected()) reconnect();
   mpu.setDMPEnabled(true);
   delay(100);
@@ -264,6 +269,8 @@ void loop() {
   // Ensure ESP32 connected to Laptop
   if (!client.connected()) {
     mpu.setDMPEnabled(false);
+    mpu.resetFIFO();
+    mpuInterrupt = false;
     reconnect();
     mpu.setDMPEnabled(true);
   }
@@ -292,32 +299,34 @@ void loop() {
   else if (!drawingMode && mpuInterrupt){
     mpuInterrupt = false;
     uint16_t fifoCount = mpu.getFIFOCount();
-    MpuPacket pkt;
-    while (fifoCount >= packetSize) {
+    if (fifoCount >= packetSize) {
+      MpuPacket pkt;
       mpu.getFIFOBytes(pkt.data, packetSize);
-      fifoCount -= packetSize;
-    }
-    Quaternion q;  // [w, x, y, z]
-    VectorFloat gravity;
-    float ypr[3];  // [yaw, pitch, roll]
-    VectorInt16 accel;
-    VectorInt16 accelReal;
-    mpu.dmpGetQuaternion(&q, pkt.data);
-    mpu.dmpGetGravity(&gravity, &q);
-    mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
-    mpu.dmpGetAccel(&accel, pkt.data);
-    mpu.dmpGetLinearAccel(&accelReal , &accel, &gravity);
-    if (((accelReal.x / ACCEL_SENS) >= 0.65) || ((accelReal.z / ACCEL_SENS) >= 0.65)) {
-      Serial.println(spinCount);
-      spinCount += 1;
-    }
-    if (accelReal.y / ACCEL_SENS >= 0.65 && spinCount >= 5) {
-      int strength = calcStrength(spinCount);
-      Serial.print("Thrust detected, Strength: ");
-      Serial.println(strength);
-      mpu.setDMPEnabled(false);
-      drawingMode = true;
-      spinCount = 0;
+      Quaternion q;  // [w, x, y, z]
+      VectorFloat gravity;
+      float ypr[3];  // [yaw, pitch, roll]
+      VectorInt16 accel;
+      VectorInt16 accelReal;
+      mpu.dmpGetQuaternion(&q, pkt.data);
+      mpu.dmpGetGravity(&gravity, &q);
+      mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
+      mpu.dmpGetAccel(&accel, pkt.data);
+      mpu.dmpGetLinearAccel(&accelReal , &accel, &gravity);
+      if ((fabs(accelReal.x / ACCEL_SENS) >= 0.65) || (fabs(accelReal.z / ACCEL_SENS) >= 0.65)) {
+        Serial.println(spinCount);
+        spinCount += 1;
+        ledControl.on_spell_light(spellColour, calcStrength(spinCount));
+      }
+      if (accelReal.y / ACCEL_SENS <= -0.65 && spinCount >= 5) {
+        int strength = calcStrength(spinCount);
+        Serial.print("Thrust detected, Strength: ");
+        Serial.println(strength);
+        drawingMode = true;
+        spinCount = 0;
+        ledControl.off_light();
+        publish_cast_data(strength);
+        mpu.resetFIFO();
+      }
     }
   } 
 }

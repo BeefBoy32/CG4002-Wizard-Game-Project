@@ -23,7 +23,7 @@ sampling_rate = 100  # Hz, MPU6050 DMP output
 window_seconds = 3
 window_size = sampling_rate * window_seconds  # 3 seconds -> 300 readings
 save_folder = "wand_dataset/data"  # folder to save CSV samples
-wand_classes = ["Line", "Circle", "Square", "Triangle", "Infinity", "Zigzag", "None"]
+wand_classes = ["Wave", "Circle", "Square", "Triangle", "Infinity", "Zigzag", "None"]
 current_label = "Zigzag"  # Set this before recording a gesture
 # -------------------------------------------
 
