@@ -25,9 +25,9 @@ topic = "wand/mpu"
 sampling_rate = 20 # Hz, MPU6050 DMP output
 window_seconds = 3
 window_size = sampling_rate * window_seconds  # 3 seconds -> 300 readings
-save_folder = "wand_dataset/data/shree"  # folder to save CSV samples
+save_folder = "wand_dataset/data"  # folder to save CSV samples
 wand_classes = ["Wave", "Circle", "Square", "Triangle", "Infinity", "Zigzag", "None"]
-current_label = "Circle"  # Set this before recording a gesture
+current_label = "Zigzag"  # Set this before recording a gesture
 # -------------------------------------------
 
 # Ensure save folder exists

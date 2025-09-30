@@ -3,11 +3,16 @@
 
 #include <Arduino.h>
 
-enum Channel {
+enum Colour {
   RED,
   BLUE,
-  GREEN
+  GREEN,
+  YELLOW,
+  PURPLE,
+  CYAN
 }; 
+
+const char* colourToString(Colour c);
 
 class LEDControl {
   public:
@@ -16,10 +21,13 @@ class LEDControl {
     void initializeLED();
     void on_initialize_light();
     void off_light();
+    void on_spell_light(Colour colour, int strength);
+
   private:
     int _colourPins[3];
     int _freq;
     int _res;
+    static const int COL_DIV = 51; // 255/5
 };
 
 #endif
