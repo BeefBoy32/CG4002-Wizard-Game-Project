@@ -6,18 +6,21 @@ import time
 from collections import deque
 
 # ------------------ CONFIG ------------------
-'''
+
 # Shree
 broker_address = "172.20.10.5"  # example: laptop IP
-'''
+
 
 '''
 #CK
 broker_address = "172.20.10.5"  # example: laptop IP
 '''
+'''
 # KW
 # broker_address = "192.168.1.12"
 broker_address = "172.20.10.4"  # replace with your laptop IP
+'''
+
 broker_port = 1883
 topic = "wand/mpu"
 sampling_rate = 20  # Hz, MPU6050 DMP output
