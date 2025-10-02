@@ -36,7 +36,7 @@ def on_message(client, userdata, msg):
         if msg.topic == topic1:
             global count
             if count == 60:
-                client.publish(topic3, json.dumps({"spell": 0}))
+                client.publish(topic3, json.dumps({"spell": 1}))
                 count = 0
             else:
                 data = json.loads(msg.payload.decode())

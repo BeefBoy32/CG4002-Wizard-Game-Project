@@ -11,9 +11,9 @@ bool drawingMode = true;
 
 //Wifi Variables
 // Change according to which hotspot is used
-const char *ssid = "OKW32";
-const char *password = "151122Kanwu";
-const char *mqtt_server = "172.20.10.4";
+const char* ssid = "OKW32";
+const char* password = "151122Kanwu";
+const char* mqtt_server = "172.20.10.4"; // replace with your laptop's IP
 const int mqtt_port = 1883;
 const char* TOP_MPU = "wand/mpu";
 const char* TOP_STATUS = "wand/status";

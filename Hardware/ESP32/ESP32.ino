@@ -16,9 +16,14 @@ Colour spellColour = RED;
 #define WAND true // True if Wand 1, False if Wand 2
 // MQTT broker (use your laptop IP if running Mosquitto locally)
 //Kan Wu
+/*
 const char* ssid = "OKW32";
 const char* password = "151122Kanwu";
 const char* mqtt_server = "172.20.10.4"; // replace with your laptop's IP
+*/
+const char* ssid = "SINGTEL-3FC0_5G";
+const char* password = "CmWEhyHqgKp3";
+const char* mqtt_server = "192.168.1.12"; // replace with your laptop's IP 192.168.1.12
 /*
 const char* ssid = "shree";
 const char* password = "shreedhee12";
@@ -132,7 +137,9 @@ void callback(char* topic, byte* payload, unsigned int length) {
 }
 
 void publish_cast_data(int strength) {
-  String js =  String("{\"strength\":") + String(strength) + "}";
+  String js =  String("{\"strength\":") + String(strength) +  
+               ",\"spell_type\":" + colourToString(spellColour) +
+               ",\"wand_id\":" + String(WAND) + "}";
   client.publish(TOP_CAST, js.c_str(), true);
 }
 

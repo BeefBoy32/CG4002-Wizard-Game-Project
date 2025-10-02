@@ -16,13 +16,14 @@ broker_address = "172.20.10.5"  # example: laptop IP
 broker_address = "172.20.10.5"  # example: laptop IP
 '''
 # KW
+# broker_address = "192.168.1.12"
 broker_address = "172.20.10.4"  # replace with your laptop IP
 broker_port = 1883
 topic = "wand/mpu"
-sampling_rate = 100  # Hz, MPU6050 DMP output
+sampling_rate = 20  # Hz, MPU6050 DMP output
 window_seconds = 3
 window_size = sampling_rate * window_seconds  # 3 seconds -> 300 readings
-save_folder = "wand_dataset/data"  # folder to save CSV samples
+save_folder = "../AI/wand_dataset/data"  # folder to save CSV samples
 wand_classes = ["Wave", "Circle", "Square", "Triangle", "Infinity", "Zigzag", "None"]
 current_label = "Zigzag"  # Set this before recording a gesture
 # -------------------------------------------
