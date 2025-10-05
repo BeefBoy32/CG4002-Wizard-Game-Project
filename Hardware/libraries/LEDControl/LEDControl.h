@@ -9,7 +9,8 @@ enum Colour {
   GREEN,
   YELLOW,
   PURPLE,
-  CYAN
+  CYAN,
+  WHITE
 }; 
 
 const char* colourToString(Colour c);
