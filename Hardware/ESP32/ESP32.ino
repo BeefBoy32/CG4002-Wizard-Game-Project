@@ -10,7 +10,7 @@
 // GLOBAL VARIABLES
 volatile bool drawingMode = true; // When true, send MPU data to Ultra96, else detect if there is spinning and thrusting to cast the spell
 int spinCount = 0;
-Colour spellColour = RED;
+volatile char spellType = 'U';
 
 // Wi-Fi credentials
 #define WAND true // True if Wand 1, False if Wand 2
@@ -21,7 +21,7 @@ const char* ssid = "OKW32";
 const char* password = "151122Kanwu";
 const char* mqtt_server = "172.20.10.4"; // replace with your laptop's IP
 */
-const char* ssid = "SINGTEL-3FC0_5G";
+const char* ssid = "SINGTEL-3FC0";
 const char* password = "CmWEhyHqgKp3";
 const char* mqtt_server = "192.168.1.12"; // replace with your laptop's IP 192.168.1.12
 /*
@@ -61,6 +61,19 @@ bool isButtonReleased;
 
 //LED 
 LEDControl ledControl(D2, D3, D4, 5000, 8);
+
+
+Colour charToColour(char c) {
+  switch(c) {
+    case 'I': return PURPLE;
+    case 'W': return BLUE;
+    case 'C': return RED;
+    case 'T': return GREEN;
+    case 'Z': return YELLOW;
+    case 'S': return CYAN;
+    default:  return WHITE;  // default value if unknown
+  }
+}
 
 int calcStrength(int n) {
   if (n < 50) {
@@ -123,13 +136,17 @@ void callback(char* topic, byte* payload, unsigned int length) {
   DynamicJsonDocument doc(1024);
   DeserializationError error = deserializeJson(doc, message);
   if (!error) {
-    spellColour = (Colour) doc["spell"].as<int>();
-    Serial.print("Spell Colour: ");
-    Serial.println(colourToString(spellColour));
+    const char* spellStr = doc["spell"];
+    spellType = 'U';
+    if (spellStr != nullptr && spellStr[0] != '\0') {
+      spellType = spellStr[0];
+    }
+    Serial.print("Spell Type: ");
+    Serial.println(spellType);
     drawingMode = false;
     mpu.resetFIFO();
     mpuInterrupt = false;
-    ledControl.on_spell_light(spellColour, calcStrength(spinCount));
+    ledControl.on_spell_light(charToColour(spellType), calcStrength(spinCount));
   } else {
     Serial.print("JSON parsing failed: ");
     Serial.println(error.c_str());
@@ -138,7 +155,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
 
 void publish_cast_data(int strength) {
   String js =  String("{\"strength\":") + String(strength) +  
-               ",\"spell_type\":" + colourToString(spellColour) +
+               ",\"spell_type\":" + spellType +
                ",\"wand_id\":" + String(WAND) + "}";
   client.publish(TOP_CAST, js.c_str(), true);
 }
@@ -170,7 +187,7 @@ void publish_MPU_data(const MpuPacket pkt) {
     Serial.print(", ");
     Serial.println((accel.z - laBias.z) / ACCEL_SENS * G);
     String js =  String("{\"ts\":") + String(millis()) +
-                ",\"wand_id\":" + String(WAND) +
+                ",\"wand_id\":" + String(WAND? 0 : 1) +
                 ",\"yaw\":"   + String(ypr[0] * 180 / M_PI) +
                 ",\"pitch\":" + String(ypr[1] * 180 / M_PI) +
                 ",\"roll\":" + String(ypr[2] * 180 / M_PI) +
@@ -322,7 +339,7 @@ void loop() {
       if ((fabs(accelReal.x / ACCEL_SENS) >= 0.65) || (fabs(accelReal.z / ACCEL_SENS) >= 0.65)) {
         Serial.println(spinCount);
         spinCount += 1;
-        ledControl.on_spell_light(spellColour, calcStrength(spinCount));
+        ledControl.on_spell_light(charToColour(spellType), calcStrength(spinCount));
       }
       if (accelReal.y / ACCEL_SENS <= -0.65 && spinCount >= 5) {
         int strength = calcStrength(spinCount);
