@@ -10,9 +10,12 @@ PORT = 5000
 # Global variables for game logic
 # Locks to be acquired when modifying spell deque
 spells_lock = threading.Lock()
+display_lock = threading.Lock()
 player1_spells = deque(maxlen=5)
 player2_spells = deque(maxlen=5)
 UPDATE_INTERVAL = 0.5
+battery_percent = 100
+
 
 '''
 data: dict of wand_id, spell_type and strength
@@ -157,16 +160,30 @@ def getDisplayFromSpells(player1_health, player2_health, spell_display):
     image += f"P2:{player2_health}"
     return image
 
+def modifyBatt():
+    with display_lock:
+        sys.stdout.write("\033[1B")
+        sys.stdout.write("\033[2K")
+        print(f"Battery%: {battery_percent}", end = "\r")
+        sys.stdout.write("\033[1A")
 
 def game_loop():
     player1_health = 3
     player2_health = 3
     gameEnd = False
-    while not gameEnd:
-        with spells_lock:
-            currentTime  = time.time()
-            spell_display = [None] * 5
+    initial_spell_display = [None] * 5
+    image = getDisplayFromSpells(player1_health, player2_health, initial_spell_display)
+    print(image, end = "\n")
+    print(f"Battery%: {battery_percent}")
+    sys.stdout.write("\033[2A")
+    sys.stdout.write("\r") 
+    sys.stdout.flush()
 
+    while not gameEnd:
+        currentTime  = time.time()
+        spell_display = [None] * 5
+
+        with spells_lock:
             # Check and eliminate loser of colliding spells
             if len(player1_spells) and len(player2_spells) and calculatePosition(player1_spells[0]["time"], currentTime, True) >= calculatePosition(player2_spells[0]["time"], currentTime, False):
                 winner = getCollidingSpellWinner()
@@ -192,24 +209,24 @@ def game_loop():
                 if player1_health <= 0:
                     gameEnd = True
 
-            for spell_info in player2_spells:
-                spellType = spell_info["spell_type"]
-                spellPosition = calculatePosition(spell_info["time"], currentTime, False)
-                spell_display[spellPosition] = f"{spellType}, {spell_info['strength']}"  
-            
-            for spell_info in player1_spells:
-                spellType = spell_info["spell_type"]
-                spellPosition = calculatePosition(spell_info["time"], currentTime, True)
-                spell_display[spellPosition] = f"{spellType}, {spell_info['strength']}" 
+        for spell_info in player2_spells:
+            spellType = spell_info["spell_type"]
+            spellPosition = calculatePosition(spell_info["time"], currentTime, False)
+            spell_display[spellPosition] = f"{spellType}, {spell_info['strength']}"  
+        
+        for spell_info in player1_spells:
+            spellType = spell_info["spell_type"]
+            spellPosition = calculatePosition(spell_info["time"], currentTime, True)
+            spell_display[spellPosition] = f"{spellType}, {spell_info['strength']}" 
 
-            image = getDisplayFromSpells(player1_health, player2_health, spell_display)
+        image = getDisplayFromSpells(player1_health, player2_health, spell_display)
 
-            if not gameEnd:
-                print(image, end="\r")
-            else:
-                print(image, end="\n")
-            sys.stdout.flush()
-            time.sleep(UPDATE_INTERVAL)
+        if not gameEnd:
+            with display_lock:
+                print(image, end = "\r")
+                sys.stdout.flush()
+
+        time.sleep(UPDATE_INTERVAL)
     
     print(f"Game End: Player {1 if player2_health == 0 else 2}")
 
@@ -221,6 +238,9 @@ def dummy_loop():
     json_data = '{"wand_id": 1, "spell_type": "I", "strength": 4}'
     data_dict = json.loads(json_data)
     add_player_spell(data_dict)
+    global battery_percent
+    battery_percent = 99
+    modifyBatt()
     while True:
         continue
     
