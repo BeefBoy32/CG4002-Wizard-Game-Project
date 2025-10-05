@@ -155,7 +155,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
 
 void publish_cast_data(int strength) {
   String js =  String("{\"strength\":") + String(strength) +  
-               ",\"spell_type\":" + spellType +
+               ",\"spell_type\":\"" + String(spellType) + "\"" +
                ",\"wand_id\":" + String(WAND) + "}";
   client.publish(TOP_CAST, js.c_str(), true);
 }
