@@ -278,42 +278,42 @@ void setup()
 
   attachInterrupt(digitalPinToInterrupt(MPU_INT_PIN), dmpDataReady, RISING);
   /*
-  mpu.setDMPEnabled(true);
-  long real_accelx = 0;
-  long real_accely = 0;
-  long real_accelz = 0;
-  for (int i = 0; i < N; i += 0) {
-    if (mpuInterrupt) {
-      mpuInterrupt = false;
-      uint16_t fifoCount = mpu.getFIFOCount();
-      if (fifoCount >= packetSize) {
-        Serial.println(i);
-        MpuPacket pkt;
-        mpu.getFIFOBytes(pkt.data, packetSize);
-        Quaternion q;  // [w, x, y, z]
-        VectorFloat gravity;
-        float ypr[3];  // [yaw, pitch, roll]
-        VectorInt16 accel;
-        VectorInt16 accelReal;
-        mpu.dmpGetQuaternion(&q, pkt.data);
-        mpu.dmpGetGravity(&gravity, &q);
-        mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
-        mpu.dmpGetAccel(&accel, pkt.data);
-        mpu.dmpGetLinearAccel(&accelReal , &accel, &gravity);
-        real_accelx += (long) accelReal.x;
-        real_accely += (long) accelReal.y;
-        real_accelz += (long) accelReal.z;
-        i += 1;
-      }
-    }
-  }
-  mpu.setDMPEnabled(false);
-  // Compute average bias
-  laBias.x = (int16_t) (real_accelx / N);
-  laBias.y = (int16_t) (real_accely / N);
-  laBias.z = (int16_t) (real_accelz / N);
-  Serial.println("Callibrate linear accel data");
-  */
+   mpu.setDMPEnabled(true);
+   long real_accelx = 0;
+   long real_accely = 0;
+   long real_accelz = 0;
+   for (int i = 0; i < N; i += 0) {
+     if (mpuInterrupt) {
+       mpuInterrupt = false;
+       uint16_t fifoCount = mpu.getFIFOCount();
+       if (fifoCount >= packetSize) {
+         Serial.println(i);
+         MpuPacket pkt;
+         mpu.getFIFOBytes(pkt.data, packetSize);
+         Quaternion q;  // [w, x, y, z]
+         VectorFloat gravity;
+         float ypr[3];  // [yaw, pitch, roll]
+         VectorInt16 accel;
+         VectorInt16 accelReal;
+         mpu.dmpGetQuaternion(&q, pkt.data);
+         mpu.dmpGetGravity(&gravity, &q);
+         mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
+         mpu.dmpGetAccel(&accel, pkt.data);
+         mpu.dmpGetLinearAccel(&accelReal , &accel, &gravity);
+         real_accelx += (long) accelReal.x;
+         real_accely += (long) accelReal.y;
+         real_accelz += (long) accelReal.z;
+         i += 1;
+       }
+     }
+   }
+   mpu.setDMPEnabled(false);
+   // Compute average bias
+   laBias.x = (int16_t) (real_accelx / N);
+   laBias.y = (int16_t) (real_accely / N);
+   laBias.z = (int16_t) (real_accelz / N);
+   Serial.println("Callibrate linear accel data");
+   */
   setup_wifi();
 
   snprintf(TOP_MPU, sizeof TOP_MPU, "wand/%d/mpu", WAND_ID);
