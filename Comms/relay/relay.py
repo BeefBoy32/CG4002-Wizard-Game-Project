@@ -1,5 +1,5 @@
 # from socket import socket
-import json, time, collections, threading, socket
+import json, time, collections, threading, socket, os
 from bleak import cli
 import paho.mqtt.client as mqtt
 from paho.mqtt.client import CallbackAPIVersion
@@ -8,17 +8,26 @@ import ssl
 BROKER = "172.20.10.5"   # your laptop IP
 PORT   = 1883            # your mosquitto port
 
-ULTRA96_IP = "172.26.191.147"  # update if needed
+# ULTRA96_IP = "172.26.191.147"  # update if needed
+ULTRA96_IP = "127.0.0.1"  # update if needed
 ULTRA96_PORT = 5000
 sock = None
 
 # Topics
-T_WAND_MPU = "wand/mpu"
-T_WAND_CMD  = "wand/cmd"
-T_WAND_CAST = "wand/cast"
-T_U96_DRAW_IN  = "u96/draw/in"
-T_U96_DRAW_OUT = "u96/draw/out"
-T_U96_CAST_IN  = "u96/cast/in"
+# T_WAND_CMD  = "wand/cmd"
+T_WAND_HELLO = "wand/hello"
+T_WAND_MPU = "wand/+/mpu"
+T_WAND_CAST = "wand/+/cast"
+T_SPELL_ID_FMT = "wand/{wid}/spell"
+
+
+# T_U96_DRAW_IN  = "u96/draw/in"
+# T_U96_DRAW_OUT = "u96/draw/out"
+# T_U96_CAST_IN  = "u96/cast/in"
+
+T_U96_MPU = "wand/u96/mpu"   # Ultra96 will subscribe here
+T_U96_CAST = "wand/u96/cast"
+T_U96_SPELL = "wand/u96/spell"
 
 # TLS certs for Mosquitto
 CA_CERT   = "../../certs/ca.crt"
@@ -26,11 +35,76 @@ CERT_FILE = "../../certs/server.crt"
 KEY_FILE  = "../../certs/server.key"
 
 # Buffer ~2s at 10Hz (adjust as you like)
-WINDOW_LEN = 20
+WINDOW_LEN = 60
 
 # one buffer per wand
-buf = {0: collections.deque(maxlen=WINDOW_LEN),
-       1: collections.deque(maxlen=WINDOW_LEN)}
+buf = {}  # mac -> deque
+
+#To parse wand ID from topic
+def topic_wid(topic: str) -> int:
+    # expects "wand/<int>/mpu" or "wand/<int>/cast"
+    try:
+        seg = topic.split('/')[1]
+        wid = int(''.join(ch for ch in seg if ch.isdigit()))
+        return wid
+    except Exception as e:
+        print(f"[wid] bad topic='{topic}' err={e}")
+        return 0
+
+# ID assignment state (runtime only; resets each run)
+uid_to_id = {}
+next_id = 0
+
+def ensure_id_for_uid(uid: str) -> int:
+    global next_id
+    uid = str(uid).upper()
+    if uid in uid_to_id:
+        return uid_to_id[uid]
+    if next_id >= 2:
+        print(f"[assign] already have 2 wands, giving {uid} id {next_id} anyway")
+    uid_to_id[uid] = next_id
+    wid = next_id
+    next_id += 1
+    print(f"[assign] {uid} -> {wid}")
+    return wid
+
+# def load_map():
+#     global mac_to_id, id_to_mac
+#     if os.path.exists(MAP_FILE):
+#         with open(MAP_FILE, "r") as f:
+#             mac_to_id = json.load(f)
+#     id_to_mac = {int(v): k for k, v in mac_to_id.items()}
+#     print("[map] loaded:", mac_to_id)
+
+# def save_map():
+#     with open(MAP_FILE, "w") as f:
+#         json.dump(mac_to_id, f)
+#     print("[map] saved:", mac_to_id)
+
+# def next_free_id():
+#     # 2-player game: prefer 0 then 1
+#     for cand in (0,1):
+#         if cand not in id_to_mac:
+#             return cand
+#     # fallback: still allow more, but you probably only need 2
+#     cand = 0
+#     while cand in id_to_mac: cand += 1
+#     return cand
+
+# def ensure_id_for(mac:str) -> int:
+#     mac = mac.upper()
+#     if mac in mac_to_id:
+#         return int(mac_to_id[mac])
+#     wid = next_free_id()
+#     mac_to_id[mac] = wid
+#     id_to_mac[wid] = mac
+#     save_map()
+#     print(f"[assign] {mac} -> {wid}")
+#     return wid
+
+# def topic_mac(topic:str) -> str:
+#     # "wand/AA:BB:CC:DD:EE:FF/mpu" -> AA:BB:...
+#     return topic.split('/')[1].upper()
 
 # Takes the 7-byte message from ESP32 IMU and converts the raw ax/ay/az to g's
 def mpu_json_to_point(b: bytes):
@@ -50,7 +124,6 @@ def mpu_json_to_point(b: bytes):
     }
 
 def listen_ultra96(cli: mqtt.Client):
-    """Line-buffered listener: one JSON per line from Ultra96."""
     global sock
     leftover = b""
     while True:
@@ -66,16 +139,15 @@ def listen_ultra96(cli: mqtt.Client):
             try:
                 msg = json.loads(line.decode())
                 print("Ultra96 -> Laptop:", msg)
-                # Relay classification back to ESP32 if needed
-                cli.publish(T_U96_DRAW_OUT, json.dumps(msg), qos=1)
-                cmd = {
-                    "cmd": "spell",
-                    "spell_id": int(msg.get("spell_id", 0)),
-                    "conf": float(msg.get("conf", 1.0)),
-                    "flags": {"armed": True, "stable": bool(msg.get("stable", False))}
-                }
-                cli.publish(T_WAND_CMD, json.dumps(cmd), qos=1)
-                print("⬅️ Relayed U96 result back to ESP32:", cmd)
+
+                # Expect: {"wand_id": 0/1, "spell_type":"C/W/T/S/Z/I", ...}
+                wid    = int(msg.get("wand_id", 0))
+                letter = str(msg.get("spell_type", "U"))[:1]
+
+                cli.publish(f"wand/{wid}/spell", json.dumps({"spell": letter}), qos=1, retain=False)
+                print(f"⬅️ U96 -> wand{wid}/spell: {letter}")
+                
+                cli.publish("u96/draw/out", json.dumps(msg), qos=0)
             except Exception as e:
                 print("Error parsing Ultra96 message:", e)
 
@@ -83,35 +155,68 @@ def listen_ultra96(cli: mqtt.Client):
 # MQTT message handler
 def on_message(cli, _, msg):
     global sock
-    if msg.topic == T_WAND_MPU:
-        pt = mpu_json_to_point(msg.payload)
-        wid = pt["wand_id"]
-        
-        if wid not in buf:
-            buf[wid] = collections.deque(maxlen=WINDOW_LEN)
-        buf[wid].append(pt)
 
-        full = (len(buf[wid]) == WINDOW_LEN)
+    if msg.topic.endswith("/mpu"):
+        wid = topic_wid(msg.topic)
+        print(f"[mpu] topic={msg.topic} -> wid={wid}")
+        pt  = json.loads(msg.payload.decode())
+        # keep only the fields U96 needs
+        p = {
+            "ts":    int(pt.get("ts", 0)),
+            "ax":    float(pt.get("accelx", 0.0)),
+            "ay":    float(pt.get("accely", 0.0)),
+            "az":    float(pt.get("accelz", 0.0)),
+            "yaw":   float(pt.get("yaw", 0.0)),
+            "pitch": float(pt.get("pitch", 0.0)),
+            "roll":  float(pt.get("roll", 0.0)),
+        }
 
-        if full:
-            ts = [p["ts"] for p in buf[wid] if p.get("ts")]
-            dt_ms = int(round((ts[-1]-ts[0]) / max(1, len(ts)-1))) if len(ts) >= 2 else 100
+        dq = buf.setdefault(wid, collections.deque(maxlen=WINDOW_LEN))
+        dq.append(p)
 
+        if len(dq) == WINDOW_LEN:
+            ts = [q["ts"] for q in dq if q["ts"]]
+            dt_ms = int(round((ts[-1] - ts[0]) / max(1, len(ts) - 1))) if len(ts) >= 2 else 50
             win = {
                 "window_id": int(time.time()*1000) & 0xffffffff,
                 "dt_ms": dt_ms,
-                "points": [
-                    {
-                        "ts": p["ts"],
-                        "ax": p["ax"], "ay": p["ay"], "az": p["az"],   # g
-                        "yaw": p["yaw"], "pitch": p["pitch"], "roll": p["roll"]  # deg
-                    }
-                    for p in buf[wid]
-                ],
+                "points": list(dq),          # list, not deque
                 "meta": {"wand_id": wid}
             }
             sock.sendall((json.dumps(win) + "\n").encode())
-            print(f"Laptop -> Ultra96: wid={wid} points={len(buf[wid])} dt={dt_ms}ms")
+            cli.publish(T_U96_MPU, json.dumps(win), qos=0, retain=False)
+            print(f"Relay -> U96: wid={wid} points={len(dq)} dt={dt_ms}ms")
+            dq.clear()
+
+    elif msg.topic.endswith("/cast"):
+        wid = topic_wid(msg.topic)
+        ct  = json.loads(msg.payload.decode())
+
+        cast = {
+            "type": "cast",
+            "wand_id": wid,
+            "strength": int(ct.get("strength", 1)),
+            "ts": ct.get("ts", 0)
+        }
+        sock.sendall((json.dumps(cast) + "\n").encode())
+        print(f"Relay -> U96 (cast): wid={wid} strength={cast['strength']}")
+    
+    elif msg.topic == T_WAND_HELLO:
+        try:
+            d = json.loads(msg.payload.decode())
+            uid = str(d.get("uid","")).upper()
+            if not uid:
+                print("[hello] missing uid")
+                return
+            wid = ensure_id_for_uid(uid)
+            # reply to *exactly* wand/<UID>/assign
+            cli.publish(f"wand/{uid}/assign",
+                        json.dumps({"wand_id": wid}),
+                        qos=1, retain=False)
+            print(f"[hello] replied wand/{uid}/assign -> {{'wand_id':{wid}}}")
+        except Exception as e:
+            print("[hello] error:", e)
+        return
 
 
 def main():
@@ -126,6 +231,7 @@ def main():
     cli.connect(BROKER, PORT, 60)
     cli.on_message = on_message
     cli.subscribe([
+        (T_WAND_HELLO, 1),
         (T_WAND_MPU, 0),
         (T_WAND_CAST, 1),
     ])
