@@ -138,7 +138,7 @@ void callback(char* topic, byte* payload, unsigned int length) {
     DynamicJsonDocument doc(1024);
     DeserializationError error = deserializeJson(doc, message);
     if (!error) {
-      const char* spellStr = doc["spell"];
+      const char* spellStr = doc["spell_type"];
       spellType = 'U';
       if (spellStr != nullptr && spellStr[0] != '\0') {
       spellType = spellStr[0];
@@ -153,6 +153,9 @@ void callback(char* topic, byte* payload, unsigned int length) {
       Serial.print("JSON parsing failed: ");
       Serial.println(error.c_str());
     }
+  }
+  else {
+    Serial.print(topic);
   }
 }
 

@@ -37,7 +37,13 @@ def on_message(client, userdata, msg):
         if msg.topic == topic1:
             global count
             if count == 60:
-                client.publish(topic3, json.dumps({"spell": "I"}))
+                client.publish(topic3, json.dumps({
+                        "wand_id": 1,
+                        "spell_id": 1,        # keep if you still use numeric somewhere
+                        "spell_type": "C",    # <-- single-letter for ESP
+                        "conf": 0.97,
+                        "stable": True
+                    }))
                 count = 0
             else:
                 data = json.loads(msg.payload.decode())

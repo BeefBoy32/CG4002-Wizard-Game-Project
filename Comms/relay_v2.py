@@ -2,10 +2,9 @@
 import json, time, collections, threading, socket, os
 from bleak import cli
 import paho.mqtt.client as mqtt
-from paho.mqtt.client import CallbackAPIVersion
 import ssl
 
-BROKER = "172.20.10.5"   # your laptop IP
+BROKER = "192.168.1.12"   # your laptop IP
 PORT   = 1883            # your mosquitto port
 
 # ULTRA96_IP = "172.26.191.147"  # update if needed
@@ -45,7 +44,7 @@ def listen_ultra96(cli: mqtt.Client):
                 wid    = int(msg.get("wand_id", 0))
                 letter = str(msg.get("spell_type", "U"))[:1]
 
-                cli.publish(T_WAND1_SPELL if wid == 1 else T_WAND2_SPELL, msg , qos=1, retain=False)
+                cli.publish(T_WAND1_SPELL if wid == 1 else T_WAND2_SPELL, line, qos=1, retain=False)
                 print(f"⬅️ U96 -> wand{wid}/spell: {letter}")
                 
             except Exception as e:
@@ -55,7 +54,7 @@ def listen_ultra96(cli: mqtt.Client):
 # MQTT message handler
 def on_message(cli, _, msg):
     global sock
-    sock.sendall(msg + b"\n")
+    sock.sendall(msg.payload + b"\n")
 
 
 def main():
@@ -66,7 +65,7 @@ def main():
     print(f"Connected to Ultra96 at {ULTRA96_IP}:{ULTRA96_PORT}")
 
     # 2) MQTT
-    cli = mqtt.Client(CallbackAPIVersion.VERSION1, client_id="relay-node")
+    cli = mqtt.Client("relay-node")
     cli.connect(BROKER, PORT, 60)
     cli.on_message = on_message
     cli.subscribe([
