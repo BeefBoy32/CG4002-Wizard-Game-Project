@@ -40,6 +40,14 @@ def add_player_spell(data):
         player2_spells.append({"spell_type": data["spell_type"], "strength": data["strength"], "time": time.time()})
 
 '''
+'''
+def weakenSpell(strength1, strength2):
+    if strength1 > strength2:
+        player1_spells[0]["strength"] -= strength2
+    else:
+        player2_spells[0]["strength"] -= strength1
+
+'''
 Return: 1 if player 1 win, 2 if player 2 win, 0 if draw
 '''
 def getCollidingSpellWinner():
@@ -54,13 +62,14 @@ def getCollidingSpellWinner():
             elif player2_spell == "W" or player2_spell == "Z":
                 strength1 = player1_spells[0]["strength"]
                 strength2 = player2_spells[0]["strength"]
+                weakenSpell(strength1, strength2)
                 if strength1 > strength2:
                     return 1
                 if strength1 == strength2:
                     return 0
                 return 2
             else:
-                return False
+                return 2
         # Circle
         # Wins: Square and Triangle, Draws: Infinity, Lose: Wave, ZigZag 
         case "C":
@@ -69,14 +78,14 @@ def getCollidingSpellWinner():
             elif player2_spell == "I" or player2_spell == "C":
                 strength1 = player1_spells[0]["strength"]
                 strength2 = player2_spells[0]["strength"]
+                weakenSpell(strength1, strength2)
                 if strength1 > strength2:
                     return 1
                 if strength1 == strength2:
                     return 0
                 return 2
             else:
-                return False
-
+                return 2
         # Square
         # Wins: Infinity and Lightning, Draws: Triangle, Lose: Wave, Circle
         case "S":
@@ -85,13 +94,14 @@ def getCollidingSpellWinner():
             elif player2_spell == "T" or player2_spell == "S":
                 strength1 = player1_spells[0]["strength"]
                 strength2 = player2_spells[0]["strength"]
+                weakenSpell(strength1, strength2)
                 if strength1 > strength2:
                     return 1
                 if strength1 == strength2:
                     return 0
                 return 2
             else:
-                return False
+                return 2
             
         # Triangle
         # Wins: ZigZag and Wave, Draws: Square, Lose: Infinity, Circle
@@ -101,13 +111,14 @@ def getCollidingSpellWinner():
             elif player2_spell == "S" or player2_spell == "T":
                 strength1 = player1_spells[0]["strength"]
                 strength2 = player2_spells[0]["strength"]
+                weakenSpell(strength1, strength2)
                 if strength1 > strength2:
                     return 1
                 if strength1 == strength2:
                     return 0
                 return 2
             else:
-                return False
+                return 2
             
         # ZigZag
         # Wins: Infinity and Circle, Draws: Wave, Lose: Triangle, Square
@@ -117,13 +128,14 @@ def getCollidingSpellWinner():
             elif player2_spell == "Z" or player2_spell == "W":
                 strength1 = player1_spells[0]["strength"]
                 strength2 = player2_spells[0]["strength"]
+                weakenSpell(strength1, strength2)
                 if strength1 > strength2:
                     return 1
                 if strength1 == strength2:
                     return 0
                 return 2
             else:
-                return False
+                return 2
             
         # Infinity
         # Wins: Triangle and Wave, Draws: Circle, Lose: ZigZag, Square
@@ -133,13 +145,14 @@ def getCollidingSpellWinner():
             elif player2_spell == "I" or player2_spell == "C":
                 strength1 = player1_spells[0]["strength"]
                 strength2 = player2_spells[0]["strength"]
+                weakenSpell(strength1, strength2)
                 if strength1 > strength2:
                     return 1
                 if strength1 == strength2:
                     return 0
                 return 2
             else:
-                return False
+                return 2
             
         case _:
             print("Unknown spell type, Game end!")
@@ -232,7 +245,7 @@ def game_loop():
 
 def dummy_loop():
     time.sleep(5.0)
-    json_data = '{"wand_id": 0, "spell_type": "I", "strength": 5}'
+    json_data = '{"wand_id": 0, "spell_type": "W", "strength": 5}'
     data_dict = json.loads(json_data)
     add_player_spell(data_dict)
     json_data = '{"wand_id": 1, "spell_type": "I", "strength": 4}'
