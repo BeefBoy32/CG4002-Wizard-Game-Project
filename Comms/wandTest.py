@@ -16,11 +16,12 @@ broker_address = "172.20.10.5"  # example: laptop IP
 broker_address = "172.20.10.5"  # example: laptop IP
 '''
 # KW
-broker_address = "172.20.10.4"  # replace with your laptop IP
+broker_address = "192.168.1.12"  # replace with your laptop IP
 broker_port = 1883
 topic1 = "wand/mpu"
 topic2 = "wand/cast"
-topic3 = "wand/spell"
+topic3 = "wand1/spell"
+topic4 = "wand2/spell"
 count = 0
 
 def on_connect(client, userdata, flags, rc):
@@ -36,7 +37,7 @@ def on_message(client, userdata, msg):
         if msg.topic == topic1:
             global count
             if count == 60:
-                client.publish(topic3, json.dumps({"spell": 1}))
+                client.publish(topic3, json.dumps({"spell": "I"}))
                 count = 0
             else:
                 data = json.loads(msg.payload.decode())

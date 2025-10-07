@@ -1,185 +1,361 @@
+#include "Wire.h"
+#include <MPU6050_6Axis_MotionApps20.h>
+#include <Button.h>
+#include <queue>
 #include <WiFi.h>
 #include <PubSubClient.h>
+#include <LEDControl.h>
+#include <ArduinoJson.h>
 
-const char *ssid = "shree";
-const char *password = "shreedhee12";
+// GLOBAL VARIABLES
+volatile bool drawingMode = true; // When true, send MPU data to Ultra96, else detect if there is spinning and thrusting to cast the spell
+int spinCount = 0;
+volatile char spellType = 'U';
 
-const char *mqtt_server = "172.20.10.5";
-const int mqtt_port = 1884; // <-- match your mosquitto
-
-const char *TOP_CMD = "wand/cmd";
-const char *TOP_IMU7 = "wand/imu7";
-const char *TOP_CAST = "wand/cast";
-const char *TOP_STATUS = "wand/status";
-
-volatile bool ARMED = false;
-volatile uint8_t SPELL_ID = 0;
+// Wi-Fi credentials
+#define WAND true // True if Wand 1, False if Wand 2
+// MQTT broker (use your laptop IP if running Mosquitto locally)
+//Kan Wu
+/*
+const char* ssid = "OKW32";
+const char* password = "151122Kanwu";
+const char* mqtt_server = "172.20.10.4"; // replace with your laptop's IP
+*/
+const char* ssid = "SINGTEL-3FC0";
+const char* password = "CmWEhyHqgKp3";
+const char* mqtt_server = "192.168.1.12"; // replace with your laptop's IP 192.168.1.12
+/*
+const char* ssid = "shree";
+const char* password = "shreedhee12";
+const char* mqtt_server = "172.20.10.5"; // replace with your laptop's IP
+*/
+const int mqtt_port = 1883;
+const char* TOP_MPU = "wand/mpu";
+const char* TOP_CAST = "wand/cast";
+const char* TOP_SPELL = WAND ? "wand1/spell" : "wand2/spell";
 
 WiFiClient espClient;
 PubSubClient client(espClient);
 
+// MPU6050, DMP
+MPU6050 mpu;
+#define ACCEL_SENS 16384.0
+#define G 9.80655
+#define MPU_INT_PIN D5  // using GPIO9
+volatile bool mpuInterrupt = false;
+int mpuCount = 0;
+
+uint16_t packetSize;
+uint8_t fifoBuffer[64];
+VectorInt16 laBias = {0,0,0};
+int N = 500; // number of samples (~0.5s if 1kHz DMP)
+struct MpuPacket {
+    uint8_t data[64]; // DMP packet size
+};
+std::queue<MpuPacket> mpuQueue;
+bool dmpReady;
+
+// Wand Button
+Button myButton(D7, 50);
+bool isButtonHeld;
+bool isButtonReleased;
+
+//LED 
+LEDControl ledControl(D2, D3, D4, 5000, 8);
+
+
+Colour charToColour(char c) {
+  switch(c) {
+    case 'I': return PURPLE;
+    case 'W': return BLUE;
+    case 'C': return RED;
+    case 'T': return GREEN;
+    case 'Z': return YELLOW;
+    case 'S': return CYAN;
+    default:  return WHITE;  // default value if unknown
+  }
+}
+
+int calcStrength(int n) {
+  if (n < 50) {
+    return 1;
+  }
+  if (n < 100){
+    return 2;
+  }
+  if (n < 150) {
+    return 3;
+  }
+  if (n < 200) {
+    return 4;
+  }
+  return 5;
+}
+
+
 void setup_wifi()
 {
-    WiFi.mode(WIFI_STA);
-    WiFi.begin(ssid, password);
-    Serial.print("Connecting to WiFi");
-    while (WiFi.status() != WL_CONNECTED)
-    {
-        delay(400);
-        Serial.print(".");
-    }
-    Serial.println("\nWiFi connected, IP=" + WiFi.localIP().toString());
-}
-
-void on_cmd(char *topic, byte *payload, unsigned int len)
-{
-    // Copy payload to String and print it so we always see what arrived
-    String s;
-    s.reserve(len);
-    for (unsigned i = 0; i < len; i++)
-        s += (char)payload[i];
-    Serial.print("[/cmd] ");
-    Serial.println(s);
-
-    // Find "spell_id" (quoted or not), then parse the next integer
-    int k = s.indexOf("spell_id");
-    int spell = -1;
-    if (k >= 0)
-    {
-        // find the ':' after spell_id
-        int c = s.indexOf(':', k);
-        if (c >= 0)
-        {
-            // advance to first digit or minus sign
-            int i = c + 1;
-            while (i < (int)s.length() && (s[i] == ' ' || s[i] == '\t'))
-                i++;
-            bool neg = (i < (int)s.length() && s[i] == '-');
-            if (neg)
-                i++;
-            // accumulate digits
-            int val = 0, start = i;
-            while (i < (int)s.length() && isdigit((unsigned char)s[i]))
-            {
-                val = val * 10 + (s[i] - '0');
-                i++;
-            }
-            if (i > start)
-                spell = neg ? -val : val;
-        }
-    }
-
-    if (spell >= 0)
-    {
-        Serial.print("=> spell_id = ");
-        Serial.println(spell);
-        // TODO: store it & arm state machine if you want:
-        SPELL_ID = (uint8_t)spell;
-        ARMED = true;
-        Serial.println("ARMED");
-    }
-    else
-    {
-        Serial.println("=> couldn't parse spell_id");
-    }
-}
-
-void publish_imu7_demo()
-{
-    // flags: drawing_mode=1 (bit1), more-data=1 (bit0) -> 0b00000011
-    uint8_t b[7];
-    b[0] = (1 << 1) | (1 << 0);
-    int16_t ax = 100, ay = 200, az = 300; // demo numbers for now
-    b[1] = ax & 0xFF;
-    b[2] = (ax >> 8) & 0xFF;
-    b[3] = ay & 0xFF;
-    b[4] = (ay >> 8) & 0xFF;
-    b[5] = az & 0xFF;
-    b[6] = (az >> 8) & 0xFF;
-    client.publish(TOP_IMU7, b, 7, false);
-}
-
-void publish_cast(uint8_t strength, bool thrust)
-{
-    static uint16_t seq = 0;
-    seq++;
-    String js = String("{\"ts\":") + String(millis()) +
-                ",\"seq\":" + String(seq) +
-                ",\"spell_id\":" + String(SPELL_ID) +
-                ",\"strength\":" + String(strength) +
-                ",\"thrust\":" + (thrust ? "true" : "false") +
-                ",\"flags\":{\"armed\":" + String(ARMED ? "true" : "false") + "}}";
-    client.publish(TOP_CAST, js.c_str(), true);
+  delay(10);
+  Serial.println("Connecting to WiFi...");
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("\nWiFi connected");
 }
 
 void reconnect()
 {
-    while (!client.connected())
+  while (!client.connected())
+  {
+    Serial.println("Attempting MQTT connection...");
+    if (client.connect(WAND? "WAND1" : "WAND2"))
     {
-        Serial.print("Attempting MQTT connection...");
-        if (client.connect("ESP32Client",
-                           nullptr, nullptr,    // no user/pass
-                           TOP_STATUS, 0, true, // Last Will (topic, QoS, retain)
-                           "{\"state\":\"offline\"}"))
-        { // LWT payload
-            Serial.println("connected");
-            client.subscribe(TOP_CMD, 1);
-            client.publish(TOP_STATUS, "{\"state\":\"online\"}", true); // retained
-        }
-        else
-        {
-            Serial.print("failed, rc=");
-            Serial.print(client.state());
-            Serial.println(" retry in 2s");
-            delay(2000);
-        }
+      Serial.println("connected");
+      client.subscribe(TOP_SPELL);
     }
+    else
+    {
+      Serial.print("failed, rc=");
+      Serial.print(client.state());
+      delay(2000);
+    }
+  }
 }
 
-void setup()
-{
-    Serial.begin(115200);
-    setup_wifi();
-    client.setServer(mqtt_server, mqtt_port);
-    client.setCallback(on_cmd);
+void callback(char* topic, byte* payload, unsigned int length) {
+  // Convert payload to String
+  if (strcmp(topic, TOP_SPELL) == 0) {
+    String message;
+    for (unsigned int i = 0; i < length; i++) {
+      message += (char)payload[i];
+    }
+    Serial.print("Message received: ");
+    Serial.println(message);
+  
+    // Parse JSON
+    DynamicJsonDocument doc(1024);
+    DeserializationError error = deserializeJson(doc, message);
+    if (!error) {
+      const char* spellStr = doc["spell"];
+      spellType = 'U';
+      if (spellStr != nullptr && spellStr[0] != '\0') {
+      spellType = spellStr[0];
+      }
+      Serial.print("Spell Type: ");
+      Serial.println(spellType);
+      drawingMode = false;
+      mpu.resetFIFO();
+      mpuInterrupt = false;
+      ledControl.on_spell_light(charToColour(spellType), calcStrength(spinCount));
+    } else {
+      Serial.print("JSON parsing failed: ");
+      Serial.println(error.c_str());
+    }
+  }
 }
 
-void loop()
-{
-    if (!client.connected())
-        reconnect();
-    client.loop();
+void publish_cast_data(int strength) {
+  String js =  String("{\"strength\":") + String(strength) +  
+               ",\"spell_type\":" + "\"" + String(spellType) + "\"" +
+               ",\"wand_id\":" + String(WAND ? 1 : 2) +
+               ",\"topic\":" + "\"" + TOP_CAST + "\"" + "}";
+  client.publish(TOP_CAST, js.c_str(), true);
+}
 
-    // Optional: heartbeat so you see something in the monitor
-    static unsigned long last = 0;
-    if (millis() - last > 3000)
-    {
-        last = millis();
-        Serial.println("alive...");
+void publish_MPU_data(const MpuPacket pkt) {
+    Quaternion q;  // [w, x, y, z]
+    VectorFloat gravity;
+    float ypr[3];  // [yaw, pitch, roll]
+    VectorInt16 accel;
+    // VectorInt16 accelReal;
+    mpu.dmpGetQuaternion(&q, pkt.data);
+    mpu.dmpGetGravity(&gravity, &q);
+    mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
+    mpu.dmpGetAccel(&accel, pkt.data);
+    // mpu.dmpGetLinearAccel(&accelReal , &accel, &gravity);
+    // Output YPR + accelerometer
+    Serial.print("YPR: ");
+    Serial.print(ypr[0] * 180 / M_PI);
+    Serial.print(", ");
+    Serial.print(ypr[1] * 180 / M_PI);
+    Serial.print(", ");
+    Serial.print(ypr[2] * 180 / M_PI);
+    Serial.print(" | ");
+    
+    Serial.print("Acc: ");
+    Serial.print((accel.x - laBias.x) / ACCEL_SENS * G);
+    Serial.print(", ");
+    Serial.print((accel.y - laBias.y) / ACCEL_SENS * G);
+    Serial.print(", ");
+    Serial.println((accel.z - laBias.z) / ACCEL_SENS * G);
+    String js =  String("{\"ts\":") + String(millis()) +
+                ",\"topic\":" + "\"" + TOP_MPU + "\"" +
+                ",\"wand_id\":" + String(WAND? 1 : 2) +
+                ",\"yaw\":"   + String(ypr[0] * 180 / M_PI) +
+                ",\"pitch\":" + String(ypr[1] * 180 / M_PI) +
+                ",\"roll\":" + String(ypr[2] * 180 / M_PI) +
+                ",\"accelx\":" + String((accel.x - laBias.x) / ACCEL_SENS * G) +
+                ",\"accely\":" + String((accel.y - laBias.y) / ACCEL_SENS * G) +
+                ",\"accelz\":" + String((accel.z - laBias.z) / ACCEL_SENS * G) +
+                "}";  
+    client.publish(TOP_MPU, js.c_str(), true);
+}
+
+void send_MPU_data() {
+  while (!mpuQueue.empty()) {
+    MpuPacket pkt = mpuQueue.front();
+    mpuQueue.pop();
+    publish_MPU_data(pkt);
+  }
+}
+
+void IRAM_ATTR dmpDataReady() {
+    mpuInterrupt = true;
+}
+
+void setup() {
+  Serial.begin(115200);
+
+  ledControl.initializeLED();
+  delay(2000);
+  ledControl.on_initialize_light();
+  
+  myButton.InitializeButton();
+  Serial.println("Button initialized");
+  
+  // Initialize MPU6050
+  Wire.begin();
+  // Cheap board used, testConnection will not work, but still able to receive correct data
+  if (mpu.testConnection()) Serial.println("MPU6050 connection successful");
+ 
+  uint8_t devStatus = mpu.dmpInitialize();
+  delay(2000); // Let mgyro and accelerometer reading stabilise
+  if (devStatus == 0) {
+    mpu.CalibrateAccel(6);
+    mpu.CalibrateGyro(6);
+    mpu.PrintActiveOffsets(); 
+    packetSize = mpu.dmpGetFIFOPacketSize();
+  } else {
+    dmpReady = false;
+    Serial.print("DMP Initialization failed (code ");
+    Serial.print(devStatus);
+    Serial.println(")");
+  }
+  Serial.println("Callibrate raw accel data");
+  
+  attachInterrupt(digitalPinToInterrupt(MPU_INT_PIN), dmpDataReady, RISING);
+  /*
+  mpu.setDMPEnabled(true);
+  long real_accelx = 0;
+  long real_accely = 0;
+  long real_accelz = 0;
+  for (int i = 0; i < N; i += 0) {
+    if (mpuInterrupt) {
+      mpuInterrupt = false;
+      uint16_t fifoCount = mpu.getFIFOCount();
+      if (fifoCount >= packetSize) {
+        Serial.println(i);
+        MpuPacket pkt;
+        mpu.getFIFOBytes(pkt.data, packetSize);
+        Quaternion q;  // [w, x, y, z]
+        VectorFloat gravity;
+        float ypr[3];  // [yaw, pitch, roll]
+        VectorInt16 accel;
+        VectorInt16 accelReal;
+        mpu.dmpGetQuaternion(&q, pkt.data);
+        mpu.dmpGetGravity(&gravity, &q);
+        mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
+        mpu.dmpGetAccel(&accel, pkt.data);
+        mpu.dmpGetLinearAccel(&accelReal , &accel, &gravity);
+        real_accelx += (long) accelReal.x;
+        real_accely += (long) accelReal.y;
+        real_accelz += (long) accelReal.z;
+        i += 1;
+      }
     }
-    // --- DEMO imu7 every 2s ---
-    // static unsigned long lastImu = 0;
-    // if (millis() - lastImu > 2000) {
-    //   lastImu = millis();
-    //   publish_imu7_demo();
-    // }
+  }
+  mpu.setDMPEnabled(false);
+  // Compute average bias
+  laBias.x = (int16_t) (real_accelx / N);
+  laBias.y = (int16_t) (real_accely / N);
+  laBias.z = (int16_t) (real_accelz / N);
+  Serial.println("Callibrate linear accel data");
+  */
+  setup_wifi();
+  client.setServer(mqtt_server, mqtt_port);
+  client.setCallback(callback);
+  if (!client.connected()) reconnect();
+  mpu.setDMPEnabled(true);
+  delay(100);
+  mpu.resetFIFO();
+  mpuInterrupt = false;
+  ledControl.off_light();
+}
 
-    // --- If ARMED, simulate spin strength then one thrust:true ---
-    static unsigned long lastCast = 0;
-    static uint8_t strength = 0;
+void loop() {
+  // Ensure ESP32 connected to Laptop
+  if (!client.connected()) {
+    mpu.setDMPEnabled(false);
+    mpu.resetFIFO();
+    mpuInterrupt = false;
+    reconnect();
+    mpu.setDMPEnabled(true);
+  }
+  client.loop();
 
-    if (ARMED && millis() - lastCast > 500)
-    {
-        lastCast = millis();
-        if (strength < 5)
-            strength++;                // climb 1..5
-        bool thrust = (strength == 4); // one-shot at 4 for demo
-        publish_cast(strength, thrust);
-        if (thrust)
-        { // reset after casting
-            ARMED = false;
-            strength = 0;
-            Serial.println("CAST SENT, disarmed");
+  if (drawingMode && mpuInterrupt) {
+      mpuInterrupt = false;
+      uint16_t fifoCount = mpu.getFIFOCount();
+      if (fifoCount >= packetSize) {
+        MpuPacket pkt;
+        mpu.getFIFOBytes(pkt.data, packetSize);
+        if (mpuCount == 5) {
+          publish_MPU_data(pkt);
+          mpuCount = 0;
+        } else {
+          mpuCount += 1;
         }
+      }
+      /* TODO: Have a function that runs when ESP32 receive data
+       *  1.RESET FIFO
+       *  2.Change drawingMode to False
+       *  3.Flash LED light based on spell casted
+       */
+  }
+  
+  else if (!drawingMode && mpuInterrupt){
+    mpuInterrupt = false;
+    uint16_t fifoCount = mpu.getFIFOCount();
+    if (fifoCount >= packetSize) {
+      MpuPacket pkt;
+      mpu.getFIFOBytes(pkt.data, packetSize);
+      Quaternion q;  // [w, x, y, z]
+      VectorFloat gravity;
+      float ypr[3];  // [yaw, pitch, roll]
+      VectorInt16 accel;
+      VectorInt16 accelReal;
+      mpu.dmpGetQuaternion(&q, pkt.data);
+      mpu.dmpGetGravity(&gravity, &q);
+      mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
+      mpu.dmpGetAccel(&accel, pkt.data);
+      mpu.dmpGetLinearAccel(&accelReal , &accel, &gravity);
+      if ((fabs(accelReal.x / ACCEL_SENS) >= 0.65) || (fabs(accelReal.z / ACCEL_SENS) >= 0.65)) {
+        Serial.println(spinCount);
+        spinCount += 1;
+        ledControl.on_spell_light(charToColour(spellType), calcStrength(spinCount));
+      }
+      if (accelReal.y / ACCEL_SENS <= -0.65 && spinCount >= 5) {
+        int strength = calcStrength(spinCount);
+        Serial.print("Thrust detected, Strength: ");
+        Serial.println(strength);
+        drawingMode = true;
+        spinCount = 0;
+        ledControl.off_light();
+        publish_cast_data(strength);
+        mpu.resetFIFO();
+      }
     }
+  } 
 }
