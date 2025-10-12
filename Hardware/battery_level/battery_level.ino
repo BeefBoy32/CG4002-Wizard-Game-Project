@@ -1,10 +1,9 @@
 #include "Wire.h"
 #include "MAX17043.h"
-
 void setup() {
   Serial.begin(115200);
   Wire.begin();
-  if (!FuelGauge.begin(&Wire, 0x76)) {
+  if (!FuelGauge.begin(&Wire)) {
     Serial.println("MAX17043 NOT found.\n");
     while (true) {}
   }

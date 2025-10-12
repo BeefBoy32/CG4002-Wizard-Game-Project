@@ -14,7 +14,8 @@ display_lock = threading.Lock()
 player1_spells = deque(maxlen=5)
 player2_spells = deque(maxlen=5)
 UPDATE_INTERVAL = 0.5
-battery_percent = 100
+battery_percent1 = 100
+battery_percent2 = 100
 
 
 '''
@@ -22,7 +23,7 @@ data: dict of wand_id, spell_type and strength
 '''
 def add_player_spell(data):
     with spells_lock:
-        if data["wand_id"] == 0:
+        if data["wand_id"] == 1:
             if len(player1_spells) >= 5:
                 print("Too many spells from player 1! Discarding spell...")
                 return
@@ -173,12 +174,18 @@ def getDisplayFromSpells(player1_health, player2_health, spell_display):
     image += f"P2:{player2_health}"
     return image
 
-def modifyBatt():
+def modifyBatt(wand_num):
     with display_lock:
-        sys.stdout.write("\033[1B")
-        sys.stdout.write("\033[2K")
-        print(f"Battery%: {battery_percent}", end = "\r")
-        sys.stdout.write("\033[1A")
+        if wand_num == 1:
+            sys.stdout.write("\033[1B")
+            sys.stdout.write("\033[2K")
+            print(f"Wand1 Battery%: {battery_percent1}", end = "\r")
+            sys.stdout.write("\033[1A")
+        elif wand_num == 2:
+            sys.stdout.write("\033[2B")
+            sys.stdout.write("\033[2K")
+            print(f"Wand2 Battery%: {battery_percent2}", end = "\r")
+            sys.stdout.write("\033[2A")
 
 def game_loop():
     player1_health = 3
@@ -187,8 +194,9 @@ def game_loop():
     initial_spell_display = [None] * 5
     image = getDisplayFromSpells(player1_health, player2_health, initial_spell_display)
     print(image, end = "\n")
-    print(f"Battery%: {battery_percent}")
-    sys.stdout.write("\033[2A")
+    print(f"Wand1 Battery%: {battery_percent1}")
+    print(f"Wand2 Battery%: {battery_percent2}")
+    sys.stdout.write("\033[3A")
     sys.stdout.write("\r") 
     sys.stdout.flush()
 
@@ -240,20 +248,37 @@ def game_loop():
                 sys.stdout.flush()
 
         time.sleep(UPDATE_INTERVAL)
-    
-    print(f"Game End: Player {1 if player2_health == 0 else 2}")
+    print("\033[2K", end = "\r")
+    print(f"Game End: Player {1 if player2_health == 0 else 2} Wins")
 
 def dummy_loop():
     time.sleep(5.0)
-    json_data = '{"wand_id": 0, "spell_type": "W", "strength": 5}'
+    json_data = '{"wand_id": 1, "spell_type": "W", "strength": 5}'
     data_dict = json.loads(json_data)
     add_player_spell(data_dict)
-    json_data = '{"wand_id": 1, "spell_type": "I", "strength": 4}'
+    json_data = '{"wand_id": 2, "spell_type": "I", "strength": 4}'
     data_dict = json.loads(json_data)
     add_player_spell(data_dict)
-    global battery_percent
-    battery_percent = 99
-    modifyBatt()
+    global battery_percent1
+    global battery_percent2
+    battery_percent1 = 99
+    battery_percent2 = 88
+    modifyBatt(1)
+    modifyBatt(2)
+    time.sleep(5.0)
+    json_data = '{"wand_id": 1, "spell_type": "C", "strength": 2}'
+    data_dict = json.loads(json_data)
+    add_player_spell(data_dict)
+    time.sleep(5.0)
+    json_data = '{"wand_id": 2, "spell_type": "C", "strength": 2}'
+    data_dict = json.loads(json_data)
+    add_player_spell(data_dict)
+    time.sleep(5.0)
+    json_data = '{"wand_id": 2, "spell_type": "C", "strength": 2}'
+    data_dict = json.loads(json_data)
+    add_player_spell(data_dict)
+
+
     while True:
         continue
     
