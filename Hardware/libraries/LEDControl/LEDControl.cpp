@@ -27,7 +27,6 @@ void LEDControl::initializeLED() {
 }
 
 void LEDControl::on_initialize_light() {
-    off_light();
     ledcWrite(_colourPins[GREEN], 150);
     ledcWrite(_colourPins[BLUE], 200);
     ledcWrite(_colourPins[RED], 140);
