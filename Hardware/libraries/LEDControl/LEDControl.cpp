@@ -8,7 +8,7 @@ const char* colourToString(Colour c) {
     case YELLOW:   return "YELLOW";
     case PURPLE: return "PURPLE";
     case CYAN:  return "CYAN";
-    default:    return "UNKNOWN";
+    default:    return "WHITE";
   }
 }
 
@@ -28,7 +28,9 @@ void LEDControl::initializeLED() {
 
 void LEDControl::on_initialize_light() {
     off_light();
-    ledcWrite(_colourPins[BLUE], 255);
+    ledcWrite(_colourPins[GREEN], 150);
+    ledcWrite(_colourPins[BLUE], 200);
+    ledcWrite(_colourPins[RED], 140);
 }
 
 void LEDControl::off_light() {
@@ -41,27 +43,38 @@ void LEDControl::on_spell_light(Colour colour, int strength) {
     switch (colour) {
         case RED:
             ledcWrite(_colourPins[RED], strength * COL_DIV);
+            ledcWrite(_colourPins[BLUE], 0);
+            ledcWrite(_colourPins[GREEN], 0);
             break;
         case GREEN:
             ledcWrite(_colourPins[GREEN], strength * COL_DIV);
+            ledcWrite(_colourPins[BLUE], 0);
+            ledcWrite(_colourPins[RED], 0);
             break;
         case BLUE:
             ledcWrite(_colourPins[BLUE], strength * COL_DIV);
+            ledcWrite(_colourPins[GREEN], 0);
+            ledcWrite(_colourPins[RED], 0);
             break;
         case YELLOW:
             ledcWrite(_colourPins[RED], strength * (int) (COL_DIV / 4.0) * 3);
             ledcWrite(_colourPins[GREEN], strength * COL_DIV);
+            ledcWrite(_colourPins[BLUE], 0);
             break;
         case PURPLE:
             ledcWrite(_colourPins[RED], strength * (int) (COL_DIV / 2.0));
             ledcWrite(_colourPins[BLUE], strength * COL_DIV);
+            ledcWrite(_colourPins[GREEN], 0);
             break;
         case CYAN:
             ledcWrite(_colourPins[GREEN], strength * (int) (COL_DIV / 2.0));
             ledcWrite(_colourPins[BLUE], strength * COL_DIV);
+            ledcWrite(_colourPins[RED], 0);
             break;
         default:
-            break;
+            ledcWrite(_colourPins[GREEN], 128);
+            ledcWrite(_colourPins[BLUE], 192);
+            ledcWrite(_colourPins[RED], 96);
     }
 }
 
