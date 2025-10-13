@@ -3,13 +3,14 @@
 #include <Button.h>
 #include <queue>
 #include <WiFi.h>
-#include <PubSubClient.h>
 #include <LEDControl.h>
 #include <ArduinoJson.h>
 #include "MAX17043.h"
+#include <espMqttClient.h>
 
 // GLOBAL VARIABLES
 volatile bool drawingMode = true; // When true, send MPU data to Ultra96, else detect if there is spinning and thrusting to cast the spell
+volatile bool transitionMode = false;
 bool wandReady = false;
 volatile bool otherReady = false;
 volatile bool u96Ready = false;
@@ -18,7 +19,6 @@ volatile char spellType = 'U';
 
 // Wi-Fi credentials
 #define WAND true // True if Wand 1, False if Wand 2
-// MQTT broker (use your laptop IP if running Mosquitto locally)
 //Kan Wu
 
 /*
@@ -38,6 +38,9 @@ const char* mqtt_server = "172.20.10.2"; // replace with your laptop's IP
 */
 
 const int mqtt_port = 1883;
+const char* WAND_CLIENT = WAND ? "wand1-client" : "wand2-client";
+espMqttClient mqttClient;
+
 // 
 const char* TOP_STATUS = WAND ? "wand1/status" : "wand2/status";
 const char* TOP_BATT = WAND ? "wand1/batt" : "wand2/batt";
@@ -47,9 +50,6 @@ const char* TOP_CAST = WAND ? "wand1/cast" : "wand2/cast";
 const char* TOP_OTHER = WAND ? "wand2/status" : "wand1/status";
 const char* TOP_U96 = "u96/status";
 const char* TOP_SPELL = WAND ? "u96/wand1/spell" : "u96/wand2/spell";
-
-WiFiClient espClient;
-PubSubClient client(espClient);
 
 // MPU6050, DMP
 MPU6050 mpu;
@@ -125,106 +125,66 @@ void publish_batt() {
   float pcnt = FuelGauge.percent();
   String js =  String("{\"voltage\":") + String(volts) +  
                ",\"percent\":" + String(pcnt) + "}";
-  client.publish(TOP_BATT, js.c_str(), true);
+  mqttClient.publish(TOP_BATT, 1, true, js.c_str());
 }
 
-void reconnect()
-{
-  String disconnect_message =  String("{\"ready\":") + String("false") + "}";
-  if (WiFi.status() != WL_CONNECTED) {
-    setup_wifi();
-  }
 
-  while (!client.connected())
-  {
-    Serial.println("Attempting MQTT connection...");
-    if (client.connect(WAND? "WAND1" : "WAND2", NULL, NULL, TOP_STATUS, 1, true, disconnect_message.c_str()))
-    {
-      Serial.println("connected");
-      client.subscribe(TOP_SPELL, 1);
-      client.subscribe(TOP_OTHER, 1);
-      client.subscribe(TOP_U96, 1);
-      String connect_message =  String("{\"ready\":") + String("true") + "}";
-      client.publish(TOP_STATUS, connect_message.c_str(), true);
-      publish_batt();
-    }
-    else
-    {
-      Serial.print("failed, rc=");
-      Serial.print(client.state());
-      delay(2000);
-    }
-  }
+void onMqttConnect(bool sessionPresent) {
+  Serial.println("✅ MQTT Connected!");
+  mqttClient.subscribe(TOP_SPELL, 2);
+  mqttClient.subscribe(TOP_U96, 1);
+  mqttClient.subscribe(TOP_OTHER, 1);
+  mqttClient.publish("foo/bar", 0, true, "test 1");
+  String connect_message =  String("{\"ready\":") + String("true") + "}";
+  mqttClient.publish(TOP_STATUS, 1, true, connect_message.c_str());
+  publish_batt();
 }
 
-void callback(char* topic, byte* payload, unsigned int length) {
-  // Convert payload to String
-  String message;
-  for (unsigned int i = 0; i < length; i++) {
-    message += (char)payload[i];
-  }
-  Serial.print("Message received: ");
-  Serial.println(message);
-  if (strcmp(topic, TOP_SPELL) == 0) { 
-    // Parse JSON
-    DynamicJsonDocument doc(1024);
-    DeserializationError error = deserializeJson(doc, message);
-    if (!error) {
-      String spellStr = doc["spell_type"];
-      spellType = 'U';
-      if (spellStr != nullptr && spellStr[0] != '\0') {
-        spellType = spellStr[0];
-      }
-      Serial.print("Spell Type: ");
-      Serial.println(spellType);
-      drawingMode = false;
-      mpu.resetFIFO();
-      mpuInterrupt = false;
+void onMqttMessage(
+  const espMqttClientTypes::MessageProperties& properties, 
+  const char* topic,
+  const uint8_t* payload,
+  size_t len,
+  size_t index,
+  size_t total){
+  char msg[len + 1];
+  memcpy(msg, payload, len);
+  msg[len] = '\0';
+  Serial.print("Received on topic: ");
+  Serial.println(topic);
+  Serial.print("Payload: ");
+  Serial.println(msg);
+  StaticJsonDocument<200> doc;
+  DeserializationError error = deserializeJson(doc, msg);
+  if (!error) {
+    if (strcmp(topic, TOP_SPELL) == 0){
+      const char* spellStr = doc["spell_type"];
+      spellType = spellStr[0];
       ledControl.on_spell_light(charToColour(spellType), calcStrength(spinCount));
-    } else {
-      Serial.print("JSON parsing failed: ");
-      Serial.println(error.c_str());
+      transitionMode = true;
+      drawingMode = false;
     }
-  }
-  else if (strcmp(topic, TOP_U96) == 0) {
-    DynamicJsonDocument doc(1024);
-    DeserializationError error = deserializeJson(doc, message);
-    if (!error) {
-      u96Ready = doc["ready"].as<bool>();
+    else if (strcmp(topic, TOP_U96) == 0) {
       const char* state = WAND ? "wand1_state" : "wand2_state";
-      drawingMode = doc[state]["drawingMode"].as<bool>();
-      String spellStr = doc[state]["spell"];
-      spellType = 'U';
-      if (spellStr != nullptr && spellStr[0] != '\0') {
-        spellType = spellStr[0];
-      }
-    } else {
-      Serial.print("JSON parsing failed: ");
-      Serial.println(error.c_str());
+      drawingMode = doc[state]["drawingMode"];
+      const char* spellStr = doc[state]["spell"];
+      spellType = spellStr[0];
+      // Set last to ensure values have been initialised
+      u96Ready = doc["ready"];
     }
-  }
-  else if (strcmp(topic, TOP_OTHER) == 0) {
-    DynamicJsonDocument doc(1024);
-    DeserializationError error = deserializeJson(doc, message);
-    if (!error) {
-      otherReady = doc["ready"].as<bool>();
-    } else {
-      Serial.print("JSON parsing failed: ");
-      Serial.println(error.c_str());
+    else if (strcmp(topic, TOP_OTHER) == 0) {
+      otherReady = doc["ready"];
     }
-  }
-  else {
-    Serial.print(topic);
+  } else {
+    Serial.print("Failed to parse JSON: ");
+    Serial.println(error.c_str());
   }
 }
-
-
-
 
 void publish_cast_data(int strength) {
   String js =  String("{\"strength\":") + String(strength) +  
                ",\"spell_type\":" + "\"" + String(spellType) + "\"" + "}";
-  client.publish(TOP_CAST, js.c_str(), false);
+  mqttClient.publish(TOP_CAST, 2, false, js.c_str());
 }
 
 void publish_MPU_data(const MpuPacket pkt) {
@@ -260,8 +220,8 @@ void publish_MPU_data(const MpuPacket pkt) {
                 ",\"accelx\":" + String((accel.x - laBias.x) / ACCEL_SENS * G) +
                 ",\"accely\":" + String((accel.y - laBias.y) / ACCEL_SENS * G) +
                 ",\"accelz\":" + String((accel.z - laBias.z) / ACCEL_SENS * G) +
-                "}";  
-    client.publish(TOP_MPU, js.c_str(), false);
+                "}";
+    mqttClient.publish(TOP_MPU, 0, false, js.c_str());
 }
 
 void IRAM_ATTR dmpDataReady() {
@@ -309,11 +269,15 @@ void setup() {
   Serial.println("Callibrate raw accel data");
   
   attachInterrupt(digitalPinToInterrupt(MPU_INT_PIN), dmpDataReady, RISING);
- 
+  
   setup_wifi();
-  client.setServer(mqtt_server, mqtt_port);
-  client.setCallback(callback);
-  if (!client.connected()) reconnect();
+  mqttClient.setWill(TOP_STATUS, 1, true, (String("{\"ready\":") + String("false") + String("}")).c_str()); // topic, message, retain, QoS
+  mqttClient.setServer(mqtt_server, mqtt_port);
+  mqttClient.setClientId(WAND_CLIENT);
+  mqttClient.onConnect(onMqttConnect);
+  mqttClient.onMessage(onMqttMessage);
+  mqttClient.connect();
+  
   mpu.setDMPEnabled(true);
   delay(100);
   mpu.resetFIFO();
@@ -323,11 +287,18 @@ void setup() {
 
 void loop() {
   // Ensure ESP32 connected to Laptop and wifi
-  if (!client.connected()) {
+  if (!mqttClient.connected()) {
     ledControl.on_initialize_light();
     mpu.setDMPEnabled(false);
     mpu.resetFIFO();
-    reconnect();
+    while(!mqttClient.connected()){
+      Serial.println("Attempting MQTT connection...");
+      if (WiFi.status() != WL_CONNECTED) {
+        setup_wifi();
+      }
+      mqttClient.connect();
+      delay(1000);
+    };
     mpu.setDMPEnabled(true);
     delay(100);
     mpu.resetFIFO();
@@ -335,7 +306,6 @@ void loop() {
     mpuCount = 0;
     ledControl.off_light();
   }
-  client.loop();
 
   //Pause here if other wand disconnect or U96 disconnect
   wandReady = otherReady && u96Ready;
@@ -345,7 +315,6 @@ void loop() {
     mpu.resetFIFO();
     while (!wandReady) {
       wandReady = otherReady && u96Ready;
-      client.loop();
     }
     mpu.setDMPEnabled(true);
     delay(100);
@@ -354,28 +323,34 @@ void loop() {
     mpuCount = 0;
     ledControl.off_light();
   }
-
-  if (drawingMode && mpuInterrupt) {
-      mpuInterrupt = false;
-      uint16_t fifoCount = mpu.getFIFOCount();
-      if (fifoCount >= packetSize) {
-        MpuPacket pkt;
-        mpu.getFIFOBytes(pkt.data, packetSize);
-        if (mpuCount == 5) {
-          publish_MPU_data(pkt);
-          mpuCount = 0;
-        } else {
-          mpuCount += 1;
-        }
-      }
-      /* TODO: Have a function that runs when ESP32 receive data
-       *  1.RESET FIFO
-       *  2.Change drawingMode to False
-       *  3.Flash LED light based on spell casted
-       */
+  
+  if (transitionMode) {
+    mpu.resetFIFO();
+    mpuInterrupt = false;
+    transitionMode = false;
   }
   
-  else if (!drawingMode && mpuInterrupt){
+  if (drawingMode && mpuInterrupt) {
+    mpuInterrupt = false;
+    uint16_t fifoCount = mpu.getFIFOCount();
+    if (fifoCount >= packetSize) {
+      MpuPacket pkt;
+      mpu.getFIFOBytes(pkt.data, packetSize);
+      if (mpuCount == 5) {
+        publish_MPU_data(pkt);
+        mpuCount = 0;
+      } else {
+        mpuCount += 1;
+      }
+    }
+    /* TODO: Have a function that runs when ESP32 receive data
+     *  1.RESET FIFO
+     *  2.Change drawingMode to False
+     *  3.Flash LED light based on spell casted
+     */
+  }
+  
+  else if (!drawingMode && mpuInterrupt && !transitionMode){
     mpuInterrupt = false;
     uint16_t fifoCount = mpu.getFIFOCount();
     if (fifoCount >= packetSize) {
@@ -391,12 +366,28 @@ void loop() {
       mpu.dmpGetYawPitchRoll(ypr, &q, &gravity);
       mpu.dmpGetAccel(&accel, pkt.data);
       mpu.dmpGetLinearAccel(&accelReal , &accel, &gravity);
+      /*
+      Serial.print("YPR: ");
+      Serial.print(ypr[0] * 180 / M_PI);
+      Serial.print(", ");
+      Serial.print(ypr[1] * 180 / M_PI);
+      Serial.print(", ");
+      Serial.print(ypr[2] * 180 / M_PI);
+      Serial.print(" | ");
+      
+      Serial.print("Acc: ");
+      Serial.print(accelReal.x / ACCEL_SENS);
+      Serial.print(", ");
+      Serial.print(accelReal.y / ACCEL_SENS);
+      Serial.print(", ");
+      Serial.println(accelReal.z / ACCEL_SENS);
+      */
       if ((fabs(accelReal.x / ACCEL_SENS) >= 0.65) || (fabs(accelReal.z / ACCEL_SENS) >= 0.65)) {
         Serial.println(spinCount);
         spinCount += 1;
         ledControl.on_spell_light(charToColour(spellType), calcStrength(spinCount));
       }
-      if (accelReal.y / ACCEL_SENS <= -0.65 && spinCount >= 5) {
+      if (accelReal.y / ACCEL_SENS <= -0.65 && calcStrength(spinCount) >= 2) {
         int strength = calcStrength(spinCount);
         Serial.print("Thrust detected, Strength: ");
         Serial.println(strength);
@@ -405,6 +396,8 @@ void loop() {
         ledControl.off_light();
         publish_cast_data(strength);
         mpu.resetFIFO();
+        mpuInterrupt = false;
+        mpuCount = 0;
       }
     }
   }

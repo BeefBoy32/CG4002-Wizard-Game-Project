@@ -3,7 +3,7 @@ import json, time, collections, threading, socket, os
 import paho.mqtt.client as mqtt
 from collections import deque
 
-BROKER = "localhost"   # "localhost" if shift to ultra96, laptopIP if on laptop
+BROKER = "192.168.1.12"   # "localhost" if shift to ultra96, laptopIP if on laptop
 PORT   = 1883            # your mosquitto port
 
 
@@ -137,7 +137,7 @@ def main():
         },
         "wand2_state": {
             "drawingMode":wand2_drawingMode,
-            "spell":wand1_spell,
+            "spell":wand2_spell,
         }
     }
     cli.publish(T_U96_STATUS, json.dumps(message), 1, True)
