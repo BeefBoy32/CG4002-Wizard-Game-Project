@@ -24,7 +24,7 @@ UPDATE_INTERVAL = 0.5
 battery_percent1 = None
 battery_percent2 = None
 wand1_drawingMode = True
-wand2_drawingMode = False
+wand2_drawingMode = True
 wand1_spell = "U"
 wand2_spell = "U"
 
@@ -57,7 +57,7 @@ def on_connect(client, userdata, flags, rc):
         (T_WAND1_CAST, 2),
         (T_WAND2_CAST, 2),
     ])
-    if battery_percent1 and battery_percent2:
+    if battery_percent1:
         message = {
             "ready":True,
             "wand1_state": {
@@ -77,33 +77,41 @@ def on_disconnect(client, userdata, rc):
 
 # MQTT message handler
 def on_message(client, _, msg):
+    global wand1IsReady, wand2IsReady, count, wand1_drawingMode, wand2_drawingMode, battery_percent1, battery_percent2, wand1_spell, wand2_spell
     topic = msg.topic
-    msgJS = json.loads(msg.payload.decode())
-    print(msg.payload.decode(), topic)
-    if topic == T_WAND1_STATUS:
-        global wand1IsReady
-        wand1IsReady = msgJS["ready"]
-        if wand1IsReady:
-            time.sleep(5)
-            message = {"ready":True}
-            client.publish(T_WAND2_STATUS, json.dumps(message), 1, True)
+    try:
+        msgJS = json.loads(msg.payload.decode())
+        print(msg.payload.decode(), topic)
+        if topic == T_WAND1_STATUS:
+            wand1IsReady = msgJS["ready"]
+            if wand1IsReady:
+                time.sleep(5)
+                message = {"ready":True}
+                client.publish(T_WAND2_STATUS, json.dumps(message), 1, True)
+                
+        elif topic == T_WAND1_MPU:
+            count += 1
+            if count == WINDOW:
+                message = {        # keep if you still use numeric somewhere
+                    "spell_type":"C",    # <-- single-letter for ESP
+                }
+                count = 0
+                client.publish(T_U96_WAND1_SPELL, json.dumps(message), 2, False)
+                wand1_drawingMode = False
+                wand1_spell = message["spell_type"]
+
+        elif topic == T_WAND1_BATT:
+            battery_percent1 = msgJS["percent"]
+
+        elif topic == T_WAND1_CAST:
+            wand1_drawingMode = True
             
-    elif topic == T_WAND1_MPU:
-        global count
-        count += 1
-        if count == WINDOW:
-            message = {        # keep if you still use numeric somewhere
-                "spell_type":"C",    # <-- single-letter for ESP
-            }
-            count = 0
-            client.publish(T_U96_WAND1_SPELL, json.dumps(message), 2, False)
-        
-
-    elif topic == T_WAND1_BATT:
-        global battery_percent1 
-        battery_percent1 = msgJS["percent"]
-
-    
+    except UnicodeDecodeError:
+        print(f"[WARN] Non-text payload on topic {msg.topic}: {msg.payload}")
+        return
+    except json.JSONDecodeError:
+        print(f"[WARN] Invalid JSON on topic {msg.topic}: {msg.payload}")
+        return
 
 def main():
     cli = mqtt.Client("Ultra96-client")

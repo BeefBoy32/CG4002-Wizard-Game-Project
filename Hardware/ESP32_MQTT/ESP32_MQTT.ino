@@ -134,7 +134,6 @@ void onMqttConnect(bool sessionPresent) {
   mqttClient.subscribe(TOP_SPELL, 2);
   mqttClient.subscribe(TOP_U96, 1);
   mqttClient.subscribe(TOP_OTHER, 1);
-  mqttClient.publish("foo/bar", 0, true, "test 1");
   String connect_message =  String("{\"ready\":") + String("true") + "}";
   mqttClient.publish(TOP_STATUS, 1, true, connect_message.c_str());
   publish_batt();
@@ -285,26 +284,34 @@ void setup() {
   ledControl.off_light();
 }
 
+void reconnect() {
+  ledControl.on_initialize_light();
+  mpu.setDMPEnabled(false);
+  mpu.resetFIFO();
+  while(!mqttClient.connected()){
+    Serial.println("Attempting MQTT connection...");
+    if (WiFi.status() != WL_CONNECTED) {
+      setup_wifi();
+    }
+    mqttClient.connect();
+    delay(1000);
+  };
+  mpu.setDMPEnabled(true);
+  delay(100);
+  mpu.resetFIFO();
+  mpuInterrupt = false;
+  mpuCount = 0;
+  if (drawingMode) {
+    ledControl.off_light();
+  } else {
+    ledControl.on_spell_light(charToColour(spellType), calcStrength(spinCount));
+  }
+}
+
 void loop() {
   // Ensure ESP32 connected to Laptop and wifi
   if (!mqttClient.connected()) {
-    ledControl.on_initialize_light();
-    mpu.setDMPEnabled(false);
-    mpu.resetFIFO();
-    while(!mqttClient.connected()){
-      Serial.println("Attempting MQTT connection...");
-      if (WiFi.status() != WL_CONNECTED) {
-        setup_wifi();
-      }
-      mqttClient.connect();
-      delay(1000);
-    };
-    mpu.setDMPEnabled(true);
-    delay(100);
-    mpu.resetFIFO();
-    mpuInterrupt = false;
-    mpuCount = 0;
-    ledControl.off_light();
+    reconnect();
   }
 
   //Pause here if other wand disconnect or U96 disconnect
@@ -314,6 +321,9 @@ void loop() {
     mpu.setDMPEnabled(false);
     mpu.resetFIFO();
     while (!wandReady) {
+      if (!mqttClient.connected()) {
+        reconnect();
+      }
       wandReady = otherReady && u96Ready;
     }
     mpu.setDMPEnabled(true);
@@ -321,7 +331,12 @@ void loop() {
     mpu.resetFIFO();
     mpuInterrupt = false;
     mpuCount = 0;
-    ledControl.off_light();
+    if (drawingMode) {
+      ledControl.off_light();
+    } else {
+      ledControl.on_spell_light(charToColour(spellType), calcStrength(spinCount));
+    }
+    
   }
   
   if (transitionMode) {
