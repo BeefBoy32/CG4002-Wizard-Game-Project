@@ -11,9 +11,9 @@ bool drawingMode = true;
 
 //Wifi Variables
 // Change according to which hotspot is used
-const char* ssid = "OKW32";
-const char* password = "151122Kanwu";
-const char* mqtt_server = "172.20.10.4"; // replace with your laptop's IP
+const char* ssid = "Deco5G";
+const char* password = "A1234567a@";
+const char* mqtt_server = "192.168.68.52"; // replace with your laptop's IP
 const int mqtt_port = 1883;
 const char* TOP_MPU = "wand/mpu";
 const char* TOP_STATUS = "wand/status";
@@ -294,53 +294,56 @@ void setup() {
   setup_wifi();
   client.setServer(mqtt_server, mqtt_port);
   ledControl.off_light();
+  delay(1000);
 }
 
 void loop() {
   if (!client.connected()) reconnect();
   client.loop();
 
-  isButtonHeld = myButton.CheckHold();
   
-  if (myButton.IsInitialHold()){
-    //Serial.println("Holding Button");
+  
+  ledControl.on_initialize_light();
+  //Serial.println("Holding Button");
 
-    // Enable DMP Interrupt to constantly get DMP readings
-    mpu.resetFIFO();
-    mpu.setDMPEnabled(true);   // enables DMP and interrupt generation
-    /*
-    while (mpuQueue.size() < 1) {
-      if (mpuInterrupt) {
-        mpuInterrupt = false;
-        uint16_t fifoCount = mpu.getFIFOCount();
-        if (fifoCount >= packetSize) {
-          MpuPacket pkt;
-          mpu.getFIFOBytes(pkt.data, packetSize);
-          mpuQueue.push(pkt);
-        }
-      }
-    }
-    */
-    for (int i = 0; i < 60; i += 0)
-    {
+  // Enable DMP Interrupt to constantly get DMP readings
+  mpu.resetFIFO();
+  mpu.setDMPEnabled(true);   // enables DMP and interrupt generation
+  /*
+  while (mpuQueue.size() < 1) {
+    if (mpuInterrupt) {
       mpuInterrupt = false;
       uint16_t fifoCount = mpu.getFIFOCount();
       if (fifoCount >= packetSize) {
         MpuPacket pkt;
         mpu.getFIFOBytes(pkt.data, packetSize);
-        if (mpuCount == 5) {
-          publish_MPU_data(pkt);
-          mpuCount = 0;
-          i += 1;
-        } else {
-          mpuCount += 1;
-        }
+        mpuQueue.push(pkt);
       }
     }
-    
-    // Disable interrupt to stop getting DMP readings
-    mpu.setDMPEnabled(false);  // disables DMP and stops interrupts
+  }
+  */
+  for (int i = 0; i < 60; i += 0)
+  {
     mpuInterrupt = false;
+    uint16_t fifoCount = mpu.getFIFOCount();
+    if (fifoCount >= packetSize) {
+      MpuPacket pkt;
+      mpu.getFIFOBytes(pkt.data, packetSize);
+      if (mpuCount == 5) {
+        publish_MPU_data(pkt);
+        mpuCount = 0;
+        i += 1;
+      } else {
+        mpuCount += 1;
+      }
+    }
+  }
+  ledControl.off_light();
+  // Disable interrupt to stop getting DMP readings
+  mpu.setDMPEnabled(false);  // disables DMP and stops interrupts
+  mpuInterrupt = false;
+  ledControl.off_light();
+  delay(1000);
     /* TODO 
      *  Calculate coordinates and send data through BLE
      *  Wait for Response of type of spell
@@ -353,5 +356,5 @@ void loop() {
     // Serial.println("Releasing Button");
     // mpu.resetFIFO();
     // mpu.setDMPEnabled(true);     
-  }
+  
 }
