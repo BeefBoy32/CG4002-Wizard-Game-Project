@@ -1,5 +1,6 @@
 {
     "files.associations": {
         "queue": "cpp"
-    }
+    },
+    "cmake.sourceDirectory": "C:/Users/ongka/OKW_NUS/CG4002/CG4002-Wizard-Game-Project/Hardware/libraries/ArduinoJson"
 }
