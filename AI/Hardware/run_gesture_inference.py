@@ -7,8 +7,9 @@ from pynq import Overlay, allocate
 import logging
 import time
 import numpy as np
+from collections import deque
 
-# -------------------- 1. Setup logger --------------------
+# 1. Setup logger 
 logger = logging.getLogger("ai_engine")
 logger.setLevel(logging.INFO)
 
@@ -21,24 +22,50 @@ formatter = logging.Formatter(
 ch.setFormatter(formatter)
 logger.addHandler(ch)
 
-# -------------------- 2. Load overlay --------------------
+# 2. Load overlay 
 ol = Overlay("/home/xilinx/bitstream/system_wrapper.xsa")
 ol.download()
 logger.info("Bitstream loaded successfully.")
 
-# -------------------- 3. Access IP and DMA --------------------
+# 3. Access IP and DMA 
 dma = ol.axi_dma_0
 ip = ol.cnn_gd_0
 
 logger.info(f"DMA:{dma}")
 logger.info(f"IP Block:{ip}")
 
-# -------------------- 4. Define gesture classes --------------------
+# 4. Define gesture classes 
 wand_classes = ["Wave", "Circle", "Square", "Triangle", "Infinity", "Zigzag", "None"]
 
-# -------------------- 5. Prepare input data --------------------
+# 5. Prepare input data 
+'''
+# Simulated queue of dicts (replace with your actual source)
+sensor_queue = [
+    {"ts": i, "yaw": 0.5*i, "pitch": 0.2*i, "roll": 0.1*i,
+     "accelx": 100+i, "accely": -50+i, "accelz": 980}
+    for i in range(60)
+]
+'''
 mpu_data = np.random.randn(60, 6).astype(np.float32)  # Dummy data
-# mpu_data = np.loadtxt("mpu_data.csv", delimiter=",", dtype=np.float32)  # Real Data
+'''
+sensor_queue = deque(maxlen=60)
+
+def add_sample(sample_dict):
+    sensor_queue.append(sample_dict)
+
+if len(sensor_queue) == 60:
+mpu_data = np.array([  
+    [
+        s["yaw"],
+        s["pitch"],
+        s["roll"],
+        float(s["accelx"]),
+        float(s["accely"]),
+        float(s["accelz"])
+    ]
+    for s in sensor_queue
+], dtype=np.float32)  
+'''
 logger.info("Input data received.")
 
 if mpu_data.shape != (60, 6):
