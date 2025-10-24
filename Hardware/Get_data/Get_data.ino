@@ -11,9 +11,9 @@ bool drawingMode = true;
 
 //Wifi Variables
 // Change according to which hotspot is used
-const char* ssid = "OKW32";
-const char* password = "151122Kanwu";
-const char* mqtt_server = "172.20.10.4"; // replace with your laptop's IP
+const char* ssid = "Deco5G";
+const char* password = "A1234567a@";
+const char* mqtt_server = "192.168.68.52"; // replace with your laptop's IP
 const int mqtt_port = 1883;
 const char* TOP_MPU = "wand/mpu";
 const char* TOP_STATUS = "wand/status";
@@ -294,7 +294,8 @@ void setup() {
   setup_wifi();
   client.setServer(mqtt_server, mqtt_port);
   ledControl.off_light();
-  delay(2000);
+
+  delay(1000);
 }
 
 void loop() {
@@ -302,8 +303,7 @@ void loop() {
   client.loop();
 
   
-  
-  ledControl.on_initialize_light()
+  ledControl.on_initialize_light();
   //Serial.println("Holding Button");
 
   // Enable DMP Interrupt to constantly get DMP readings
@@ -343,7 +343,8 @@ void loop() {
   mpu.setDMPEnabled(false);  // disables DMP and stops interrupts
   mpuInterrupt = false;
   ledControl.off_light();
-  delay(2000);
+
+  delay(1000);
     /* TODO 
      *  Calculate coordinates and send data through BLE
      *  Wait for Response of type of spell
