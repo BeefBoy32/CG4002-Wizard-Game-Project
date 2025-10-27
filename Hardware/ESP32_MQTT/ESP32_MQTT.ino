@@ -27,15 +27,16 @@ const char* password = "151122Kanwu";
 const char* mqtt_server = "172.20.10.4"; // replace with your laptop's IP
 */
 
+/*
 const char* ssid = "SINGTEL-3FC0";
 const char* password = "CmWEhyHqgKp3";
 const char* mqtt_server = "192.168.1.12"; // replace with your laptop's IP 192.168.1.12
-
-/*
-const char* ssid = "shree";
-const char* password = "shreedhee12";
-const char* mqtt_server = "172.20.10.2"; // replace with your laptop's IP
 */
+
+const char* ssid = "shree"; 
+const char* password = "shreedhee12";
+const char* mqtt_server = "172.20.10.5"; // replace with your laptop's IP
+
 
 const int mqtt_port = 1883;
 const char* WAND_CLIENT = WAND ? "wand1-client" : "wand2-client";
@@ -46,6 +47,7 @@ const char* TOP_STATUS = WAND ? "wand1/status" : "wand2/status";
 const char* TOP_BATT = WAND ? "wand1/batt" : "wand2/batt";
 const char* TOP_MPU = WAND ? "wand1/mpu" : "wand2/mpu";
 const char* TOP_CAST = WAND ? "wand1/cast" : "wand2/cast";
+
 // Subscribe
 const char* TOP_OTHER = WAND ? "wand2/status" : "wand1/status";
 const char* TOP_U96 = "u96/status";
@@ -55,7 +57,7 @@ const char* TOP_SPELL = WAND ? "u96/wand1/spell" : "u96/wand2/spell";
 MPU6050 mpu;
 #define ACCEL_SENS 16384.0
 #define G 9.80655
-#define MPU_INT_PIN D5  // using GPIO9
+#define MPU_INT_PIN D7  // using GPIO9
 volatile bool mpuInterrupt = false;
 int mpuCount = 0;
 unsigned long previous = 0;
@@ -153,7 +155,7 @@ void onMqttMessage(
   Serial.println(topic);
   Serial.print("Payload: ");
   Serial.println(msg);
-  StaticJsonDocument<200> doc;
+  StaticJsonDocument<512> doc;
   DeserializationError error = deserializeJson(doc, msg);
   if (!error) {
     if (strcmp(topic, TOP_SPELL) == 0){

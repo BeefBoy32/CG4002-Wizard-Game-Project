@@ -4,7 +4,8 @@ from bleak import cli
 import paho.mqtt.client as mqtt
 import ssl
 
-BROKER = "192.168.1.12"   # your laptop IP
+# BROKER = "192.168.1.12"   # your laptop IP
+BROKER = "172.20.10.5"   # your laptop IP
 PORT   = 1883            # your mosquitto port
 
 # ULTRA96_IP = "172.26.191.147"  # update if needed
