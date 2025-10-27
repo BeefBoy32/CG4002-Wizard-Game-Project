@@ -72,10 +72,6 @@ struct MpuPacket {
 std::queue<MpuPacket> mpuQueue;
 bool dmpReady;
 
-// Wand Button
-Button myButton(D7, 50);
-bool isButtonHeld;
-bool isButtonReleased;
 
 //LED 
 LEDControl ledControl(D2, D3, D4, 5000, 8);
@@ -235,9 +231,6 @@ void setup() {
   ledControl.initializeLED();
   delay(2000);
   ledControl.on_initialize_light();
-  
-  myButton.InitializeButton();
-  Serial.println("Button initialized");
 
   Wire.begin();
   //Initialize Fuel Gauge
@@ -254,6 +247,7 @@ void setup() {
   // Cheap board used, testConnection will not work, but still able to receive correct data
   if (mpu.testConnection()) Serial.println("MPU6050 connection successful");
  
+  Serial.println("Callibrate raw accel data");
   uint8_t devStatus = mpu.dmpInitialize();
   delay(2000); // Let mgyro and accelerometer reading stabilise
   if (devStatus == 0) {
@@ -263,11 +257,10 @@ void setup() {
     packetSize = mpu.dmpGetFIFOPacketSize();
   } else {
     dmpReady = false;
-    Serial.print("DMP Initialization failed (code ");
+    Serial.print("DMP Initialization failed code ");
     Serial.print(devStatus);
     Serial.println(")");
   }
-  Serial.println("Callibrate raw accel data");
   
   attachInterrupt(digitalPinToInterrupt(MPU_INT_PIN), dmpDataReady, RISING);
   
