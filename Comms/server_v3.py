@@ -575,6 +575,8 @@ def main():
     message = {"ready":True}
     cli.publish(T_WAND2_STATUS, json.dumps(message), 1, True)
     wand2IsReady.set()
+    wand1_drawingMode.set()
+    wand2_drawingMode.set()
     wand1IsReady.wait()
     wand2IsReady.wait()
     while(not(battery_percent1 and battery_percent2)):
@@ -582,11 +584,11 @@ def main():
     message = {
         "ready":True,
         "wand1_state": {
-            "drawingMode":wand1_drawingMode,
+            "drawingMode":wand1_drawingMode.is_set(),
             "spell":wand1_spell,
         },
         "wand2_state": {
-            "drawingMode":wand2_drawingMode,
+            "drawingMode":wand2_drawingMode.is_set(),
             "spell":wand2_spell,
         }
     }

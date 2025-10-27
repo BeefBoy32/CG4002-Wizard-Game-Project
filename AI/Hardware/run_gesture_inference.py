@@ -1,131 +1,79 @@
-#!/usr/bin/env python3
-"""
-Run gesture classification on Ultra96 FPGA with AXI DMA.
-"""
-
 from pynq import Overlay, allocate
-import logging
-import time
-import numpy as np
+import numpy as np, time, logging
 from collections import deque
 
-# 1. Setup logger 
 logger = logging.getLogger("ai_engine")
 logger.setLevel(logging.INFO)
+logger.addHandler(logging.StreamHandler())
 
-ch = logging.StreamHandler()
-ch.setLevel(logging.INFO)
-formatter = logging.Formatter(
-    "%(asctime)s - %(levelname)s - %(message)s",
-    datefmt="%Y-%m-%d %H:%M:%S"
-)
-ch.setFormatter(formatter)
-logger.addHandler(ch)
-
-# 2. Load overlay 
+# Load overlay
 ol = Overlay("/home/xilinx/bitstream/system_wrapper.xsa")
 ol.download()
-logger.info("Bitstream loaded successfully.")
+logger.info("Overlay loaded")
 
-# 3. Access IP and DMA 
 dma = ol.axi_dma_0
 ip = ol.cnn_gd_0
-
 logger.info(f"DMA:{dma}")
 logger.info(f"IP Block:{ip}")
 
-# 4. Define gesture classes 
-wand_classes = ["Circle", "Infinity", "None", "Square", "Triangle", "Wave", "Zigzag"]
+classes = ["Circle", "Infinity", "None", "Square", "Triangle", "Wave", "Zigzag"]
 
-# 5. Prepare input data 
-'''
-# Simulated queue of dicts (replace with your actual source)
-sensor_queue = [
-    {"ts": i, "yaw": 0.5*i, "pitch": 0.2*i, "roll": 0.1*i,
-     "accelx": 100+i, "accely": -50+i, "accelz": 980}
-    for i in range(60)
-]
-'''
-mpu_data = np.random.randn(60, 6).astype(np.float32)  # Dummy data
-'''
+inp_buffer = allocate(shape=(60*6,), dtype=np.float32)
+out_buffer = allocate(shape=(7,), dtype=np.float32)
 sensor_queue = deque(maxlen=60)
 
-def add_sample(sample_dict):
-    sensor_queue.append(sample_dict)
+while True:
+    # Simulate incoming data
+    sensor_queue.append({
+        "ts": time.time(),
+        "yaw": np.random.uniform(-180, 180),
+        "pitch": np.random.uniform(-90, 90),
+        "roll": np.random.uniform(-180, 180),
+        "accelx": np.random.randint(-16384, 16384),
+        "accely": np.random.randint(-16384, 16384),
+        "accelz": np.random.randint(-16384, 16384)
+    })
 
-if len(sensor_queue) == 60:
-mpu_data = np.array([  
-    [
-        s["yaw"],
-        s["pitch"],
-        s["roll"],
-        float(s["accelx"]),
-        float(s["accely"]),
-        float(s["accelz"])
-    ]
-    for s in sensor_queue
-], dtype=np.float32)  
-'''
-logger.info("Input data received.")
+    if len(sensor_queue) < 60:
+        continue  # wait until window fills
 
-if mpu_data.shape != (60, 6):
-    raise ValueError(f"MPU data must be shape (60, 6). Got: {mpu_data.shape}")
+    # Convert deque → numpy array
+    mpu_data = np.array([
+        [s["yaw"], s["pitch"], s["roll"], float(s["accelx"]), float(s["accely"]), float(s["accelz"])]
+        for s in sensor_queue
+    ], dtype=np.float32)
 
-N = 60 * 6   # 360 inputs
-M = 7        # 7 output classes
+    # Step 1: scale raw IMU values to training ranges
+    mpu_data[:, :3] /= 180.0     # yaw, pitch, roll
+    mpu_data[:, 3:] /= 16384.0   # accelx, accely, accelz
 
-# -------------------- 6. DMA Buffer Preparation --------------------
-logger.info("Allocating DMA buffers...")
-inp_buffer = allocate(shape=(N,), dtype=np.float32)
-out_buffer = allocate(shape=(M,), dtype=np.float32)
+    # Step 2: per-window standardization (same as StandardScaler().fit_transform)
+    mean = np.mean(mpu_data, axis=0, keepdims=True)
+    std = np.std(mpu_data, axis=0, keepdims=True)
+    std[std < 1e-6] = 1e-6  # avoid divide-by-zero
+    mpu_data = (mpu_data - mean) / std
 
-inp_buffer[:] = mpu_data.flatten()
-out_buffer.fill(0)
+    # Optional Step 3: clip extreme values (for safety)
+    np.clip(mpu_data, -4.0, 4.0, out=mpu_data)
 
-inp_buffer.flush()
-out_buffer.invalidate()
+    # Step 4: flatten and send to FPGA
+    inp_buffer[:] = mpu_data.flatten()
+    inp_buffer.flush()
+    out_buffer.fill(0)
+    out_buffer.invalidate()
 
-# -------------------- 7. Run inference --------------------
-logger.info("Starting DMA transfer and inference...")
-start = time.time()
+    dma.recvchannel.transfer(out_buffer)
+    dma.sendchannel.transfer(inp_buffer)
+    ip.register_map.CTRL.AP_START = 1
 
-dma.recvchannel.transfer(out_buffer)
-dma.sendchannel.transfer(inp_buffer)
+    dma.sendchannel.wait()
+    dma.recvchannel.wait()
 
-ip.register_map.CTRL.AUTO_RESTART = 0
-ip.register_map.CTRL.AP_START = 1
+    # Step 5: compute softmax + display prediction
+    out_buffer.invalidate()
+    probs = np.exp(out_buffer - np.max(out_buffer))
+    probs /= np.sum(probs)
+    pred = np.argmax(probs)
 
-dma.sendchannel.wait()
-logger.info("DMA sendchannel transfer complete.")
-dma.recvchannel.wait()
-logger.info("DMA recvchannel transfer complete.")
-
-elapsed = time.time() - start
-logger.info(f"Inference completed in {elapsed*1000:.3f} ms")
-
-# -------------------- 8. Post-processing --------------------
-out_buffer.invalidate()
-
-raw_output = np.array(out_buffer, copy=True)
-logger.info(f"Raw AI output values: {raw_output}")
-
-def softmax(x):
-    x = x - np.max(x)
-    e = np.exp(x)
-    return e / np.sum(e)
-
-probs = softmax(raw_output)
-predicted_idx = int(np.argmax(probs))
-predicted_symbol = wand_classes[predicted_idx]
-
-# -------------------- 9. Results --------------------
-logger.info("Printing input MPU data:")
-for i, row in enumerate(mpu_data):
-    logger.info(
-        f"Timestep {i+1:02d} | "
-        f"Yaw: {row[0]:.2f}, Pitch: {row[1]:.2f}, Roll: {row[2]:.2f}, "
-        f"AccelX: {row[3]:.2f}, AccelY: {row[4]:.2f}, AccelZ: {row[5]:.2f}"
-    )
-
-logger.info(f"Predicted Gesture: {predicted_symbol}")
-logger.info(f"Probabilities: {probs}")
+    logger.info(f"Gesture: {classes[pred]} | probs={probs}")
+    time.sleep(0.5)
