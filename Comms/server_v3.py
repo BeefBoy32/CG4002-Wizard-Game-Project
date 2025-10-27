@@ -41,8 +41,8 @@ player1_spells = deque(maxlen=5)
 player2_spells = deque(maxlen=5)
 UPDATE_INTERVAL = 0.5
 battery_percent1 = None
-battery_percent2 = None
-wand1_drawingMode = threading.Event()
+battery_percent2 = 100.0
+wand1_drawingMode = threading.Event()   
 wand2_drawingMode = threading.Event()
 AIModelUsed = threading.Lock()
 wand1_spell = "U"
@@ -83,11 +83,11 @@ def on_connect(client, userdata, flags, rc):
         message = {
             "ready":True,
             "wand1_state": {
-                "drawingMode":wand1_drawingMode,
+                "drawingMode":wand1_drawingMode.is_set(),
                 "spell":wand1_spell,
             },
             "wand2_state": {
-                "drawingMode":wand2_drawingMode,
+                "drawingMode":wand2_drawingMode.is_set(),
                 "spell":wand2_spell,
             }
         }
@@ -555,11 +555,11 @@ def main():
     will_message = json.dumps({
         "ready":False,
         "wand1_state": {
-            "drawingMode":wand1_drawingMode,
+            "drawingMode":wand1_drawingMode.is_set(),
             "spell":wand1_spell,
         },
         "wand2_state": {
-            "drawingMode":wand2_drawingMode,
+            "drawingMode":wand2_drawingMode.is_set(),
             "spell":wand2_spell,
         }
     })
@@ -571,6 +571,10 @@ def main():
     cli.connect(BROKER, PORT, 60)
     print("Waiting for connection...")
     cli.loop_start()
+    # TO be removed
+    message = {"ready":True}
+    cli.publish(T_WAND2_STATUS, json.dumps(message), 1, True)
+    wand2IsReady.set()
     wand1IsReady.wait()
     wand2IsReady.wait()
     while(not(battery_percent1 and battery_percent2)):

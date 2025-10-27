@@ -35,7 +35,7 @@ logger.info(f"DMA:{dma}")
 logger.info(f"IP Block:{ip}")
 
 # 4. Define gesture classes 
-wand_classes = ["Wave", "Circle", "Square", "Triangle", "Infinity", "Zigzag", "None"]
+wand_classes = ["Circle", "Infinity", "None", "Square", "Triangle", "Wave", "Zigzag"]
 
 # 5. Prepare input data 
 '''

@@ -11,9 +11,9 @@ bool drawingMode = true;
 
 //Wifi Variables
 // Change according to which hotspot is used
-const char* ssid = "Deco5G";
-const char* password = "A1234567a@";
-const char* mqtt_server = "192.168.68.52"; // replace with your laptop's IP
+const char* ssid = "iPhone";
+const char* password = "A1234567a";
+const char* mqtt_server = "172.20.10.3"; // replace with your laptop's IP
 const int mqtt_port = 1883;
 const char* TOP_MPU = "wand/mpu";
 const char* TOP_STATUS = "wand/status";
@@ -24,7 +24,7 @@ PubSubClient client(espClient);
 MPU6050 mpu;
 #define ACCEL_SENS 16384.0
 #define G 9.80655
-#define MPU_INT_PIN D5  // using GPIO9
+#define MPU_INT_PIN D7  // using GPIO9
 volatile bool mpuInterrupt = false;
 uint16_t packetSize;
 uint8_t fifoBuffer[64];
@@ -36,11 +36,6 @@ struct MpuPacket {
 std::queue<MpuPacket> mpuQueue;
 bool dmpReady;
 int mpuCount = 0;
-
-// Wand Button
-Button myButton(D7, 50);
-bool isButtonHeld;
-bool isButtonReleased;
 
 
 //LED 
@@ -230,8 +225,6 @@ void setup() {
   delay(2000);
   ledControl.on_initialize_light();
   
-  myButton.InitializeButton();
-  Serial.println("Button initialized");
   
   // Initialize MPU6050
   Wire.begin();
