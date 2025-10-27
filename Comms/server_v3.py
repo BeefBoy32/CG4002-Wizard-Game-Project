@@ -2,8 +2,10 @@
 import json, time, collections, threading, socket, os, sys
 import paho.mqtt.client as mqtt
 from collections import deque
+from ai_engine import infer as ai_infer, class_to_letter
+import numpy as np
 
-BROKER = "172.20.10.4"   # "localhost" if shift to ultra96, laptopIP if on laptop
+BROKER = "localhost"   # "localhost" if shift to ultra96, laptopIP if on laptop
 PORT   = 1883            # your mosquitto port
 
 
@@ -11,6 +13,14 @@ PORT   = 1883            # your mosquitto port
 WINDOW = 60
 COUNT1 = 0
 COUNT2 = 0
+DEBUG_AI = True
+buf = {
+    1: {"yaw": deque(maxlen=WINDOW), "pitch": deque(maxlen=WINDOW), "roll": deque(maxlen=WINDOW),
+        "accelx": deque(maxlen=WINDOW), "accely": deque(maxlen=WINDOW), "accelz": deque(maxlen=WINDOW)},
+    2: {"yaw": deque(maxlen=WINDOW), "pitch": deque(maxlen=WINDOW), "roll": deque(maxlen=WINDOW),
+        "accelx": deque(maxlen=WINDOW), "accely": deque(maxlen=WINDOW), "accelz": deque(maxlen=WINDOW)},
+}
+cli = None #MQTT client
 
 # Global variables for game logic
 # Locks to be acquired when modifying spell deque
@@ -18,10 +28,13 @@ connected = False
 pauseState = threading.Event()
 alreadyPaused = threading.Event()
 gameReady = threading.Event()
+gameEnd = threading.Event()
 pause = threading.Event()
 pausedTime = 0
 wand1IsReady = threading.Event()
 wand2IsReady = threading.Event()
+mpu1_lock = threading.Lock()
+mpu2_lock = threading.Lock()
 spells_lock = threading.Lock()
 display_lock = threading.Lock()
 player1_spells = deque(maxlen=5)
@@ -29,8 +42,9 @@ player2_spells = deque(maxlen=5)
 UPDATE_INTERVAL = 0.5
 battery_percent1 = None
 battery_percent2 = None
-wand1_drawingMode = True
-wand2_drawingMode = True
+wand1_drawingMode = threading.Event()
+wand2_drawingMode = threading.Event()
+AIModelUsed = threading.Lock()
 wand1_spell = "U"
 wand2_spell = "U"
 
@@ -49,6 +63,8 @@ T_WAND2_CAST = "wand2/cast"
 T_U96_STATUS = "u96/status"
 T_U96_WAND1_SPELL = "u96/wand1/spell"
 T_U96_WAND2_SPELL = "u96/wand2/spell"
+
+
 
 def on_connect(client, userdata, flags, rc):
     global connected
@@ -77,13 +93,14 @@ def on_connect(client, userdata, flags, rc):
         }
         client.publish(T_U96_STATUS, json.dumps(message), 1, True)
 
+
 def on_disconnect(client, userdata, rc):
     global connected
     connected = False
 
 # MQTT message handler
 def on_message(client, _, msg):
-    global COUNT1, COUNT2, wand1_drawingMode, wand2_drawingMode, battery_percent1, battery_percent2, wand1_spell, wand2_spell
+    global COUNT1, COUNT2, battery_percent1, battery_percent2, wand1_spell, wand2_spell
     topic = msg.topic
     try:
         msgJS = json.loads(msg.payload.decode())
@@ -91,13 +108,33 @@ def on_message(client, _, msg):
         if topic == T_WAND1_STATUS:
             if msgJS["ready"]:
                 wand1IsReady.set()
+            else: 
+                wand1IsReady.clear()
+
         
         if topic == T_WAND2_STATUS:
             if msgJS["ready"]:
                 wand2IsReady.set()
+            else: 
+                wand2IsReady.clear()
 
         elif topic == T_WAND1_MPU:
             # TODO add to wand1_MPU deque
+            with mpu1_lock:
+                if gameReady.is_set():
+                    b = buf[1]
+                    b["yaw"].append(float(msgJS["yaw"]))
+                    b["pitch"].append(float(msgJS["pitch"]))
+                    b["roll"].append(float(msgJS["roll"]))
+                    b["accelx"].append(float(msgJS["accelx"]))
+                    b["accely"].append(float(msgJS["accely"]))
+                    b["accelz"].append(float(msgJS["accelz"]))
+
+                else:
+                    if any(len(v) for v in buf[1].values()):
+                        for k in buf[1]: buf[1][k].clear()
+                
+            '''
             COUNT1 += 1
             if COUNT1 == WINDOW:
                 message = {        # keep if you still use numeric somewhere
@@ -105,9 +142,24 @@ def on_message(client, _, msg):
                 }
                 COUNT1 = 0
                 client.publish(T_U96_WAND1_SPELL, json.dumps(message), 2, False)
+            '''
 
         elif topic == T_WAND2_MPU:
             # TODO add to wand2_MPU deque
+            with mpu2_lock:
+                if gameReady.is_set():
+                    b = buf[2]
+                    b["yaw"].append(float(msgJS["yaw"]))
+                    b["pitch"].append(float(msgJS["pitch"]))
+                    b["roll"].append(float(msgJS["roll"]))
+                    b["accelx"].append(float(msgJS["accelx"]))
+                    b["accely"].append(float(msgJS["accely"]))
+                    b["accelz"].append(float(msgJS["accelz"]))
+
+                else:
+                    if any(len(v) for v in buf[2].values()):
+                        for k in buf[2]: buf[2][k].clear()
+            '''
             COUNT2 += 1
             if COUNT2 == WINDOW:
                 message = {        # keep if you still use numeric somewhere
@@ -115,6 +167,7 @@ def on_message(client, _, msg):
                 }
                 COUNT2 = 0
                 client.publish(T_U96_WAND2_SPELL, json.dumps(message), 2, False)
+            '''
 
         elif topic == T_WAND1_BATT:            
             battery_percent1 = msgJS["percent"]
@@ -127,11 +180,11 @@ def on_message(client, _, msg):
                 modifyBatt(2)
 
         elif topic == T_WAND1_CAST:
-            wand1_drawingMode = True
+            wand2_drawingMode.set()
             add_player_spell(msgJS, 1)
 
         elif topic == T_WAND2_CAST:
-            wand2_drawingMode = True
+            wand2_drawingMode.set()
             add_player_spell(msgJS, 2)
             
     except UnicodeDecodeError:
@@ -315,7 +368,6 @@ def modifyBatt(wand_num):
 def game_loop():
     player1_health = 3
     player2_health = 3
-    gameEnd = False
     initial_spell_display = [None] * 5
     image = getDisplayFromSpells(player1_health, player2_health, initial_spell_display)
     print(image, end = "\n")
@@ -325,7 +377,7 @@ def game_loop():
     sys.stdout.write("\r") 
     sys.stdout.flush()
 
-    while not gameEnd:
+    while not gameEnd.is_set():
         gameReady.wait()
         currentTime  = time.time()
         spell_display = [None] * 5
@@ -347,14 +399,14 @@ def game_loop():
                 player1_spells.popleft()
                 player2_health -= 1
                 if player2_health <= 0:
-                    gameEnd = True
+                    gameEnd.set()
 
             # Check if player 2 deals damage
             elif len(player2_spells) and calculatePosition(player2_spells[0]["time"], currentTime, False) <= -1:
                 player2_spells.popleft()
                 player1_health -= 1
                 if player1_health <= 0:
-                    gameEnd = True
+                    gameEnd.set()
 
         for spell_info in player2_spells:
             spellType = spell_info["spell_type"]
@@ -368,7 +420,7 @@ def game_loop():
 
         image = getDisplayFromSpells(player1_health, player2_health, spell_display)
 
-        if not gameEnd:
+        if not gameEnd.is_set():
             with display_lock:
                 print(image, end = "\r")
                 sys.stdout.flush()
@@ -405,8 +457,99 @@ def updateTimeLoop():
         gameReady.set()
         # Maybe have another event flag to trigger game logic
 
+def AILoopPlayer1():
+    while True:
+        gameReady.wait()
+        wand1_drawingMode.wait()
+        if all(len(v) == WINDOW for v in buf[1].values()):
+            with mpu1_lock:
+                window = np.column_stack([
+                    np.array(b["yaw"],    dtype=np.float32),
+                    np.array(b["pitch"],  dtype=np.float32),
+                    np.array(b["roll"],   dtype=np.float32),
+                    np.array(b["accelx"], dtype=np.float32),
+                    np.array(b["accely"], dtype=np.float32),
+                    np.array(b["accelz"], dtype=np.float32),
+                ])  # (60,6)
+            with AIModelUsed:
+                out = ai_infer(window)
+
+            # normalize ai_infer output to a class index + optional vector
+            pred_idx = None
+            vec = None
+            if isinstance(out, tuple):
+                # if first element is logits/probs vector, use argmax of that
+                first = out[0]
+                if isinstance(first, (list, np.ndarray)) and np.size(first) > 1:
+                    vec = np.array(first, dtype=np.float32).reshape(-1)
+                    pred_idx = int(np.argmax(vec))
+                else:
+                    pred_idx = int(first)
+            elif isinstance(out, (list, np.ndarray)):
+                vec = np.array(out, dtype=np.float32).reshape(-1)
+                pred_idx = int(np.argmax(vec))
+            else:
+                pred_idx = int(out)
+            letter = class_to_letter(pred_idx)
+
+            if letter != 'U':
+                message = {        # keep if you still use numeric somewhere
+                    "spell_type":letter,    # <-- single-letter for ESP
+                }
+                cli.publish(T_U96_WAND1_SPELL, json.dumps(message), 2, False)
+                wand1_drawingMode.clear()
+                with mpu1_lock:
+                    # reset for non-overlapping windows
+                    for k in buf[1]: buf[1][k].clear()
+
+def AILoopPlayer2():
+    while True:
+        gameReady.wait()
+        wand2_drawingMode.wait()
+        if all(len(v) == WINDOW for v in buf[2].values()):
+            with mpu2_lock:
+                window = np.column_stack([
+                    np.array(b["yaw"],    dtype=np.float32),
+                    np.array(b["pitch"],  dtype=np.float32),
+                    np.array(b["roll"],   dtype=np.float32),
+                    np.array(b["accelx"], dtype=np.float32),
+                    np.array(b["accely"], dtype=np.float32),
+                    np.array(b["accelz"], dtype=np.float32),
+                ])  # (60,6)
+            with AIModelUsed:
+                out = ai_infer(window)
+
+            # normalize ai_infer output to a class index + optional vector
+            pred_idx = None
+            vec = None
+            if isinstance(out, tuple):
+                # if first element is logits/probs vector, use argmax of that
+                first = out[0]
+                if isinstance(first, (list, np.ndarray)) and np.size(first) > 1:
+                    vec = np.array(first, dtype=np.float32).reshape(-1)
+                    pred_idx = int(np.argmax(vec))
+                else:
+                    pred_idx = int(first)
+            elif isinstance(out, (list, np.ndarray)):
+                vec = np.array(out, dtype=np.float32).reshape(-1)
+                pred_idx = int(np.argmax(vec))
+            else:
+                pred_idx = int(out)
+            letter = class_to_letter(pred_idx)
+
+            if letter != 'U':
+                message = {        # keep if you still use numeric somewhere
+                    "spell_type":letter,    # <-- single-letter for ESP
+                }
+                cli.publish(T_U96_WAND2_SPELL, json.dumps(message), 2, False)
+                wand2_drawingMode.clear()
+                with mpu2_lock:
+                    # reset for non-overlapping windows
+                    for k in buf[1]: buf[1][k].clear()
+
 
 def main():
+    global cli
     cli = mqtt.Client("Ultra96-client")
     # --- set Last Will before connecting ---
     will_message = json.dumps({
