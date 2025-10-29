@@ -270,6 +270,7 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(MPU_INT_PIN), dmpDataReady, RISING);
   
   setup_wifi();
+  mqttClient.setKeepAlive(3);
   mqttClient.setWill(TOP_STATUS, 1, true, (String("{\"ready\":") + String("false") + String("}")).c_str()); // topic, message, retain, QoS
   mqttClient.setServer(mqtt_server, mqtt_port);
   mqttClient.setClientId(WAND_CLIENT);

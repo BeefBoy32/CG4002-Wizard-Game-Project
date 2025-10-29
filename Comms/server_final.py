@@ -25,12 +25,11 @@ cli = None #MQTT client
 
 # Global variables for game logic
 # Locks to be acquired when modifying spell deque
-connected = False
+connected = threading.Event()
 pauseState = threading.Event()
-alreadyPaused = threading.Event()
 gameReady = threading.Event()
 gameEnd = threading.Event()
-pause = threading.Event()
+pause = threading.Semaphore(0)
 pausedTime = 0
 wand1IsReady = threading.Event()
 wand2IsReady = threading.Event()
@@ -38,6 +37,7 @@ mpu1_lock = threading.Lock()
 mpu2_lock = threading.Lock()
 spells_lock = threading.Lock()
 display_lock = threading.Lock()
+pauseLock = threading.Lock()
 player1_spells = deque(maxlen=5)
 player2_spells = deque(maxlen=5)
 UPDATE_INTERVAL = 0.5
@@ -68,8 +68,6 @@ T_U96_WAND2_SPELL = "u96/wand2/spell"
 
 
 def on_connect(client, userdata, flags, rc):
-    global connected
-    connected = True
     client.subscribe([
         (T_WAND1_STATUS, 1),
         (T_WAND2_STATUS, 1),
@@ -80,24 +78,11 @@ def on_connect(client, userdata, flags, rc):
         (T_WAND1_CAST, 2),
         (T_WAND2_CAST, 2),
     ])
-    if battery_percent1 and battery_percent2:
-        message = {
-            "ready":True,
-            "wand1_state": {
-                "drawingMode":wand1_drawingMode.is_set(),
-                "spell":wand1_spell,
-            },
-            "wand2_state": {
-                "drawingMode":wand2_drawingMode.is_set(),
-                "spell":wand2_spell,
-            }
-        }
-        client.publish(T_U96_STATUS, json.dumps(message), 1, True)
-
+    connected.set()
 
 def on_disconnect(client, userdata, rc):
-    global connected
-    connected = False
+    connected.clear()
+    pause.release()
 
 # MQTT message handler
 def on_message(client, _, msg):
@@ -111,17 +96,18 @@ def on_message(client, _, msg):
                 wand1IsReady.set()
             else: 
                 wand1IsReady.clear()
+                pause.release()
 
-        
         if topic == T_WAND2_STATUS:
             if msgJS["ready"]:
                 wand2IsReady.set()
             else: 
                 wand2IsReady.clear()
+                pause.release() 
 
         elif topic == T_WAND1_MPU:
             # TODO add to wand1_MPU deque
-            if gameReady.is_set():
+            if gameReady.is_set() and wand1_drawingMode.is_set():
                 with mpu1_lock:
                     b = buf[1]
                     b["yaw"].append(float(msgJS["yaw"]))
@@ -131,23 +117,9 @@ def on_message(client, _, msg):
                     b["accely"].append(float(msgJS["accely"]))
                     b["accelz"].append(float(msgJS["accelz"]))
 
-            else:
-                if any(len(v) for v in buf[1].values()):
-                    for k in buf[1]: buf[1][k].clear()
-            
-            '''
-            COUNT1 += 1
-            if COUNT1 == WINDOW:
-                message = {        # keep if you still use numeric somewhere
-                    "spell_type":"C",    # <-- single-letter for ESP
-                }
-                COUNT1 = 0
-                client.publish(T_U96_WAND1_SPELL, json.dumps(message), 2, False)
-            '''
-
         elif topic == T_WAND2_MPU:
             # TODO add to wand2_MPU deque
-            if gameReady.is_set():
+            if gameReady.is_set() and wand2_drawingMode.is_set():
                 with mpu2_lock:
                     b = buf[2]
                     b["yaw"].append(float(msgJS["yaw"]))
@@ -157,36 +129,30 @@ def on_message(client, _, msg):
                     b["accely"].append(float(msgJS["accely"]))
                     b["accelz"].append(float(msgJS["accelz"]))
 
-            else:
-                if any(len(v) for v in buf[2].values()):
-                    for k in buf[2]: buf[2][k].clear()
-            '''
-            COUNT2 += 1
-            if COUNT2 == WINDOW:
-                message = {        # keep if you still use numeric somewhere
-                    "spell_type":"I",    # <-- single-letter for ESP
-                }
-                COUNT2 = 0
-                client.publish(T_U96_WAND2_SPELL, json.dumps(message), 2, False)
-            '''
-
         elif topic == T_WAND1_BATT:            
             battery_percent1 = msgJS["percent"]
-            if gameReady.is_set():
+            # if gameReady.is_set():
                 # modifyBatt(1)
+                
 
         elif topic == T_WAND2_BATT:
             battery_percent2 = msgJS["percent"]
-            if gameReady.is_set():
+            # if gameReady.is_set():
                 # modifyBatt(2)
 
         elif topic == T_WAND1_CAST:
-            wand1_drawingMode.set()
+            with mpu1_lock:
+                if any(len(v) for v in buf[1].values()):
+                        for k in buf[1]: buf[1][k].clear()
             add_player_spell(msgJS, 1)
+            wand1_drawingMode.set()
 
         elif topic == T_WAND2_CAST:
-            wand2_drawingMode.set()
+            with mpu2_lock:
+                if any(len(v) for v in buf[2].values()):
+                        for k in buf[2]: buf[2][k].clear() 
             add_player_spell(msgJS, 2)
+            wand2_drawingMode.set()
             
     except UnicodeDecodeError:
         print(f"[WARN] Non-text payload on topic {msg.topic}: {msg.payload}")
@@ -432,30 +398,51 @@ def game_loop():
 
 def checkPauseLoop():
     while True:
-        pause.wait()
+        pause.acquire()
+        pauseLock.acquire()
         global pausedTime
-        if not alreadyPaused.is_set():
+        if (not(wand2IsReady.is_set() and wand1IsReady.is_set() and connected.is_set())):       
             gameReady.clear()
             pausedTime = time.time()
-            alreadyPaused.set()
+            message = {
+                "ready":connected.is_set(),
+                "wand1_state": {
+                    "drawingMode":wand1_drawingMode.is_set(),
+                    "spell":wand1_spell,
+                },
+                "wand2_state": {
+                    "drawingMode":wand2_drawingMode.is_set(),
+                    "spell":wand2_spell,
+                }
+            }
+            cli.publish(T_U96_STATUS, json.dumps(message), 1, True)
+            with mpu1_lock:
+                if any(len(v) for v in buf[1].values()):
+                        for k in buf[1]: buf[1][k].clear()
+            with mpu2_lock:
+                if any(len(v) for v in buf[2].values()):
+                    for k in buf[2]: buf[2][k].clear()
             pauseState.set()
-        pause.clear()
+        else:
+            pauseLock.release()
 
 def updateTimeLoop():
     while True:
         pauseState.wait()
-        while (not(wand2IsReady.is_set() and wand1IsReady.is_set())): 
-            continue
+        wand1IsReady.wait() 
+        wand2IsReady.wait()
+        connected.wait() 
         unPauseTime = time.time()
         timeDiff = unPauseTime - pausedTime
-        for spell_info in player1_spells:
-            spell_info["time"] += timeDiff
-            
-        for spell_info in player2_spells:
-            spell_info["time"] += timeDiff
+        with spells_lock:
+            for spell_info in player1_spells:
+                spell_info["time"] += timeDiff
+                
+            for spell_info in player2_spells:
+                spell_info["time"] += timeDiff
         pauseState.clear()
-        alreadyPaused.clear()
         gameReady.set()
+        pauseLock.release()
         # Maybe have another event flag to trigger game logic
 
 def AILoopPlayer1():
@@ -494,7 +481,7 @@ def AILoopPlayer1():
                 pred_idx = int(out)
             letter = class_to_letter(pred_idx)
             predictionCount += 1
-            print(f"Prediction {predictionCount} made: {letter}")
+            #print(f"Prediction {predictionCount} made: {letter}")
             if letter != 'U':
                 message = {        # keep if you still use numeric somewhere
                     "spell_type":letter,    # <-- single-letter for ESP
@@ -548,7 +535,7 @@ def AILoopPlayer2():
                 wand2_drawingMode.clear()
                 with mpu2_lock:
                     # reset for non-overlapping windows
-                    for k in buf[1]: buf[1][k].clear()
+                    for k in buf[2]: buf[2][k].clear()
 
 
 def main():
@@ -600,11 +587,11 @@ def main():
     # Start game when all players ready
     threading.Thread(target=checkPauseLoop, daemon=True).start()
     threading.Thread(target=updateTimeLoop, daemon=True).start()
-    # threading.Thread(target=game_loop, daemon=True).start()
+    threading.Thread(target=game_loop, daemon=True).start()
     threading.Thread(target=AILoopPlayer1, daemon=True).start()
     threading.Thread(target=AILoopPlayer2, daemon=True).start()
-    #modifyBatt(1)
-    #modifyBatt(2)
+    modifyBatt(1)
+    modifyBatt(2)
     while True:
         continue
 
