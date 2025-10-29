@@ -27,11 +27,9 @@ const char* password = "151122Kanwu";
 const char* mqtt_server = "172.20.10.4"; // replace with your laptop's IP
 */
 
-/*
 const char* ssid = "SINGTEL-3FC0";
 const char* password = "CmWEhyHqgKp3";
 const char* mqtt_server = "192.168.1.12"; // replace with your laptop's IP 192.168.1.12
-*/
 
 /*
 const char* ssid = "shree"; 
@@ -39,10 +37,11 @@ const char* password = "shreedhee12";
 const char* mqtt_server = "172.20.10.5"; // replace with your laptop's IP
 */
 
+/*
 const char* ssid = "iPhone"; 
 const char* password = "A1234567a";
 const char* mqtt_server = "172.20.10.3"; // replace with your laptop's IP
-
+*/
 
 const int mqtt_port = 1883;
 const char* WAND_CLIENT = WAND ? "wand1-client" : "wand2-client";
