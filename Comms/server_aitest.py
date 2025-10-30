@@ -41,7 +41,7 @@ player1_spells = deque(maxlen=5)
 player2_spells = deque(maxlen=5)
 UPDATE_INTERVAL = 0.5
 battery_percent1 = None
-battery_percent2 = None
+battery_percent2 = 100.0
 wand1_drawingMode = threading.Event()   
 wand2_drawingMode = threading.Event()
 AIModelUsed = threading.Lock()
@@ -120,14 +120,14 @@ def on_message(client, _, msg):
 
         elif topic == T_WAND1_BATT:            
             battery_percent1 = msgJS["percent"]
-            if gameReady.is_set():
-                modifyBatt(1)
+            # if gameReady.is_set():
+                #modifyBatt(1)
                 
 
         elif topic == T_WAND2_BATT:
             battery_percent2 = msgJS["percent"]
-            if gameReady.is_set():
-                modifyBatt(2)
+            # if gameReady.is_set():
+                #modifyBatt(2)
 
         elif topic == T_WAND1_CAST:
             with mpu1_lock:
@@ -463,7 +463,10 @@ def AILoopPlayer1():
                 pred_idx = int(out)
             letter = class_to_letter(pred_idx)
             predictionCount += 1
-            #print(f"Prediction {predictionCount} made: {letter}")
+            print(f"Prediction {predictionCount} made: {letter}")
+            for data in window:
+                print(data)
+            '''
             if letter != 'U':
                 message = {        # keep if you still use numeric somewhere
                     "spell_type":letter,    # <-- single-letter for ESP
@@ -473,6 +476,7 @@ def AILoopPlayer1():
                 with mpu1_lock:
                     # reset mpu data
                     buf[1].clear()
+            '''
 
 def AILoopPlayer2():
     while True:
@@ -538,6 +542,9 @@ def main():
     cli.loop_start()
     wand1_drawingMode.set()
     wand2_drawingMode.set()
+    message = {"ready":True}
+    cli.publish(T_WAND2_STATUS, json.dumps(message), 1, True)
+    wand2IsReady.set()
     wand1IsReady.wait()
     wand2IsReady.wait()
     while(not(battery_percent1 and battery_percent2)):
@@ -558,11 +565,11 @@ def main():
     # Start game when all players ready
     threading.Thread(target=checkPauseLoop, daemon=True).start()
     threading.Thread(target=updateTimeLoop, daemon=True).start()
-    threading.Thread(target=game_loop, daemon=True).start()
+    # threading.Thread(target=game_loop, daemon=True).start()
     threading.Thread(target=AILoopPlayer1, daemon=True).start()
     threading.Thread(target=AILoopPlayer2, daemon=True).start()
-    modifyBatt(1)
-    modifyBatt(2)
+    # modifyBatt(1)
+    # modifyBatt(2)
     while True:
         continue
 

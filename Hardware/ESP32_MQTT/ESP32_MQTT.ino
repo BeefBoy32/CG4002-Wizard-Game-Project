@@ -33,16 +33,17 @@ const char* password = "CmWEhyHqgKp3";
 const char* mqtt_server = "192.168.1.12"; // replace with your laptop's IP 192.168.1.12
 */
 
-/*
+
 const char* ssid = "shree"; 
 const char* password = "shreedhee12";
-const char* mqtt_server = "172.20.10.5"; // replace with your laptop's IP
-*/
+const char* mqtt_server = "172.20.10.2"; // replace with your laptop's IP
 
+
+/*
 const char* ssid = "iPhone"; 
 const char* password = "A1234567a";
 const char* mqtt_server = "172.20.10.3"; // replace with your laptop's IP
-
+*/
 
 const int mqtt_port = 1883;
 const char* WAND_CLIENT = WAND ? "wand1-client" : "wand2-client";
@@ -271,6 +272,7 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(MPU_INT_PIN), dmpDataReady, RISING);
   
   setup_wifi();
+  mqttClient.setKeepAlive(3);
   mqttClient.setWill(TOP_STATUS, 1, true, (String("{\"ready\":") + String("false") + String("}")).c_str()); // topic, message, retain, QoS
   mqttClient.setServer(mqtt_server, mqtt_port);
   mqttClient.setClientId(WAND_CLIENT);
