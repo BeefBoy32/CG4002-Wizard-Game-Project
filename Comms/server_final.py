@@ -11,9 +11,6 @@ PORT   = 1883            # your mosquitto port
 
 # Global variables for testing 
 WINDOW = 60
-COUNT1 = 0
-COUNT2 = 0
-predictionCount = 0
 DEBUG_AI = True
 # format [yaw, pitch, roll, accelx, accely, accelz]
 buf = {
@@ -326,13 +323,8 @@ def game_loop():
     player2_health = 3
     initial_spell_display = [None] * 5
     image = getDisplayFromSpells(player1_health, player2_health, initial_spell_display)
-    print(image, end = "\n")
-    print(f"Wand1 Battery%: {battery_percent1}")
-    print(f"Wand2 Battery%: {battery_percent2}")
-    sys.stdout.write("\033[3A")
-    sys.stdout.write("\r") 
+    print(image, end = "\r")
     sys.stdout.flush()
-
     while not gameEnd.is_set():
         gameReady.wait()
         currentTime  = time.time()
@@ -436,7 +428,7 @@ def updateTimeLoop():
 
 def AILoopPlayer1():
     while True:
-        global predictionCount
+        global wand1_spell
         gameReady.wait()
         wand1_drawingMode.wait()
         if len(buf[1]) == WINDOW:
@@ -462,9 +454,9 @@ def AILoopPlayer1():
             else:
                 pred_idx = int(out)
             letter = class_to_letter(pred_idx)
-            predictionCount += 1
             #print(f"Prediction {predictionCount} made: {letter}")
             if letter != 'U':
+                wand1_spell = letter
                 message = {        # keep if you still use numeric somewhere
                     "spell_type":letter,    # <-- single-letter for ESP
                 }
@@ -476,6 +468,7 @@ def AILoopPlayer1():
 
 def AILoopPlayer2():
     while True:
+        global wand2_spell
         gameReady.wait()
         wand2_drawingMode.wait()
         if len(buf[2]) == WINDOW:
@@ -501,8 +494,8 @@ def AILoopPlayer2():
             else:
                 pred_idx = int(out)
             letter = class_to_letter(pred_idx)
-
             if letter != 'U':
+                wand2_spell = letter
                 message = {        # keep if you still use numeric somewhere
                     "spell_type":letter,    # <-- single-letter for ESP
                 }
@@ -534,7 +527,7 @@ def main():
     cli.on_message = on_message
     cli.on_disconnect = on_disconnect
     cli.connect(BROKER, PORT, 60)
-    print("Waiting for connection...")
+    print("Waiting for wands to connect...")
     cli.loop_start()
     wand1_drawingMode.set()
     wand2_drawingMode.set()

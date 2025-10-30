@@ -41,7 +41,7 @@ player1_spells = deque(maxlen=5)
 player2_spells = deque(maxlen=5)
 UPDATE_INTERVAL = 0.5
 battery_percent1 = None
-battery_percent2 = 100.0
+battery_percent2 = None
 wand1_drawingMode = threading.Event()   
 wand2_drawingMode = threading.Event()
 AIModelUsed = threading.Lock()
@@ -445,38 +445,38 @@ def AILoopPlayer1():
             with AIModelUsed:
                 out = ai_infer(window)
 
-            # normalize ai_infer output to a class index + optional vector
-            pred_idx = None
-            vec = None
-            if isinstance(out, tuple):
-                # if first element is logits/probs vector, use argmax of that
-                first = out[0]
-                if isinstance(first, (list, np.ndarray)) and np.size(first) > 1:
-                    vec = np.array(first, dtype=np.float32).reshape(-1)
+                # normalize ai_infer output to a class index + optional vector
+                pred_idx = None
+                vec = None
+                if isinstance(out, tuple):
+                    # if first element is logits/probs vector, use argmax of that
+                    first = out[0]
+                    if isinstance(first, (list, np.ndarray)) and np.size(first) > 1:
+                        vec = np.array(first, dtype=np.float32).reshape(-1)
+                        pred_idx = int(np.argmax(vec))
+                    else:
+                        pred_idx = int(first)
+                elif isinstance(out, (list, np.ndarray)):
+                    vec = np.array(out, dtype=np.float32).reshape(-1)
                     pred_idx = int(np.argmax(vec))
                 else:
-                    pred_idx = int(first)
-            elif isinstance(out, (list, np.ndarray)):
-                vec = np.array(out, dtype=np.float32).reshape(-1)
-                pred_idx = int(np.argmax(vec))
-            else:
-                pred_idx = int(out)
-            letter = class_to_letter(pred_idx)
-            predictionCount += 1
-            print(f"Prediction {predictionCount} made: {letter}")
-            for data in window:
-                print(data)
-            '''
-            if letter != 'U':
-                message = {        # keep if you still use numeric somewhere
-                    "spell_type":letter,    # <-- single-letter for ESP
-                }
-                cli.publish(T_U96_WAND1_SPELL, json.dumps(message), 2, False)
-                wand1_drawingMode.clear()
-                with mpu1_lock:
-                    # reset mpu data
-                    buf[1].clear()
-            '''
+                    pred_idx = int(out)
+                letter = class_to_letter(pred_idx)
+                predictionCount += 1
+                print(f"Wand 1 Prediction {predictionCount} made: {letter}")
+                for data in window:
+                    print(data)
+                '''
+                if letter != 'U':
+                    message = {        # keep if you still use numeric somewhere
+                        "spell_type":letter,    # <-- single-letter for ESP
+                    }
+                    cli.publish(T_U96_WAND1_SPELL, json.dumps(message), 2, False)
+                    wand1_drawingMode.clear()
+                    with mpu1_lock:
+                        # reset mpu data
+                        buf[1].clear()
+                '''
 
 def AILoopPlayer2():
     while True:
@@ -488,33 +488,38 @@ def AILoopPlayer2():
             with AIModelUsed:
                 out = ai_infer(window)
 
-            # normalize ai_infer output to a class index + optional vector
-            pred_idx = None
-            vec = None
-            if isinstance(out, tuple):
-                # if first element is logits/probs vector, use argmax of that
-                first = out[0]
-                if isinstance(first, (list, np.ndarray)) and np.size(first) > 1:
-                    vec = np.array(first, dtype=np.float32).reshape(-1)
+                # normalize ai_infer output to a class index + optional vector
+                pred_idx = None
+                vec = None
+                if isinstance(out, tuple):
+                    # if first element is logits/probs vector, use argmax of that
+                    first = out[0]
+                    if isinstance(first, (list, np.ndarray)) and np.size(first) > 1:
+                        vec = np.array(first, dtype=np.float32).reshape(-1)
+                        pred_idx = int(np.argmax(vec))
+                    else:
+                        pred_idx = int(first)
+                elif isinstance(out, (list, np.ndarray)):
+                    vec = np.array(out, dtype=np.float32).reshape(-1)
                     pred_idx = int(np.argmax(vec))
                 else:
-                    pred_idx = int(first)
-            elif isinstance(out, (list, np.ndarray)):
-                vec = np.array(out, dtype=np.float32).reshape(-1)
-                pred_idx = int(np.argmax(vec))
-            else:
-                pred_idx = int(out)
-            letter = class_to_letter(pred_idx)
+                    pred_idx = int(out)
+                letter = class_to_letter(pred_idx)
+                print(f"Wand 2 Prediction {predictionCount} made: {letter}")
+                for data in window:
+                    print(data)
 
-            if letter != 'U':
-                message = {        # keep if you still use numeric somewhere
-                    "spell_type":letter,    # <-- single-letter for ESP
-                }
-                cli.publish(T_U96_WAND2_SPELL, json.dumps(message), 2, False)
-                wand2_drawingMode.clear()
-                with mpu2_lock:
-                    # reset mpu data
-                    buf[2].clear()
+                '''
+                if letter != 'U':
+                    message = {        # keep if you still use numeric somewhere
+                        "spell_type":letter,    # <-- single-letter for ESP
+                    }
+                    cli.publish(T_U96_WAND2_SPELL, json.dumps(message), 2, False)
+                    wand2_drawingMode.clear()
+                    with mpu2_lock:
+                        # reset mpu data
+                        buf[2].clear()
+                '''
 
 
 def main():
@@ -542,9 +547,9 @@ def main():
     cli.loop_start()
     wand1_drawingMode.set()
     wand2_drawingMode.set()
-    message = {"ready":True}
-    cli.publish(T_WAND2_STATUS, json.dumps(message), 1, True)
-    wand2IsReady.set()
+    # message = {"ready":True}
+    # cli.publish(T_WAND2_STATUS, json.dumps(message), 1, True)
+    # wand2IsReady.set()
     wand1IsReady.wait()
     wand2IsReady.wait()
     while(not(battery_percent1 and battery_percent2)):
