@@ -441,7 +441,7 @@ def AILoopPlayer1():
         wand1_drawingMode.wait()
         if len(buf[1]) == WINDOW:
             with mpu1_lock:
-                window = np.array[buf[1]] # (60,6)
+                window = np.array(buf[1]) # (60,6)
             with AIModelUsed:
                 out = ai_infer(window)
 
