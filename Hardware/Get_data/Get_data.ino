@@ -11,9 +11,9 @@ bool drawingMode = true;
 
 //Wifi Variables
 // Change according to which hotspot is used
-const char* ssid = "iPhone";
-const char* password = "A1234567a";
-const char* mqtt_server = "172.20.10.3"; // replace with your laptop's IP
+const char* ssid = "SINGTEL-3FC0";
+const char* password = "CmWEhyHqgKp3";
+const char* mqtt_server = "192.168.1.12"; // replace with your laptop's IP
 const int mqtt_port = 1883;
 const char* TOP_MPU = "wand/mpu";
 const char* TOP_STATUS = "wand/status";

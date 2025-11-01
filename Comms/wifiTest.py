@@ -11,10 +11,10 @@ from collections import deque
 # broker_address = "172.20.10.5"  # example: laptop IP
 
 #CK
-broker_address = "192.168.68.52"  # example: laptop IP
+#broker_address = "192.168.68.52"  # example: laptop IP
 
 # KW
-# broker_address = "192.168.1.12"
+broker_address = "192.168.1.12"
 # broker_address = "172.20.10.4"  # replace with your laptop IP
 
 
@@ -23,7 +23,7 @@ topic = "wand/mpu"
 sampling_rate = 20  # Hz, MPU6050 DMP output
 window_seconds = 3
 window_size = sampling_rate * window_seconds  # 3 seconds -> 60 readings
-save_folder = "../AI/wand_dataset/data"  # folder to save CSV samples
+save_folder = "../AI/wand_dataset/okw"  # folder to save CSV samples
 wand_classes = ["Circle", "Infinity", "None", "Square", "Triangle", "Wave", "Zigzag"]
 current_label = "None"  # Set this before recording a gesture
 # -------------------------------------------

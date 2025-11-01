@@ -11,7 +11,7 @@
 // GLOBAL VARIABLES
 volatile bool drawingMode = true; // When true, send MPU data to Ultra96, else detect if there is spinning and thrusting to cast the spell
 volatile bool transitionMode = false;
-bool wandReady = false;
+bool wandReady = true;
 volatile bool otherReady = false;
 volatile bool u96Ready = false;
 int spinCount = 0;
@@ -27,11 +27,11 @@ const char* password = "151122Kanwu";
 const char* mqtt_server = "172.20.10.4"; // replace with your laptop's IP
 */
 
-/*
+
 const char* ssid = "SINGTEL-3FC0";
 const char* password = "CmWEhyHqgKp3";
 const char* mqtt_server = "192.168.1.12"; // replace with your laptop's IP 192.168.1.12
-*/
+
 
 /*
 const char* ssid = "shree"; 
@@ -39,10 +39,16 @@ const char* password = "shreedhee12";
 const char* mqtt_server = "172.20.10.5"; // replace with your laptop's IP
 */
 
+/*
+const char* ssid = "Pizza Hut x Dominos Free Wifi"; 
+const char* password = "kanwunigga";
+const char* mqtt_server = "192.168.222.188"; // replace with your laptop's IP
+*/
+/*
 const char* ssid = "iPhone"; 
 const char* password = "A1234567a";
-const char* mqtt_server = "172.20.10.3"; // replace with your laptop's IP
-
+const char* mqtt_server = "172.20.10.10"; // replace with your laptop's IP
+*/
 
 const int mqtt_port = 1883;
 const char* WAND_CLIENT = WAND ? "wand1-client" : "wand2-client";
@@ -231,6 +237,29 @@ void IRAM_ATTR dmpDataReady() {
     mpuInterrupt = true;
 }
 
+void reconnect() {
+  ledControl.on_initialize_light();
+  while(!mqttClient.connected()){
+    Serial.println("Attempting MQTT connection...");
+    if (WiFi.status() != WL_CONNECTED) {
+       setup_wifi();
+    }
+    mqttClient.connect();
+    delay(1000);   
+  };
+  mpu.setDMPEnabled(true);
+  delay(100);
+  mpu.resetFIFO();
+  mpuInterrupt = false;
+  mpuCount = 0;
+  if (drawingMode) {
+    ledControl.off_light();
+  } else {
+    ledControl.on_spell_light(charToColour(spellType), calcStrength(spinCount));
+  }
+}
+
+
 void setup() {
   Serial.begin(115200);
 
@@ -271,6 +300,7 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(MPU_INT_PIN), dmpDataReady, RISING);
   
   setup_wifi();
+  mqttClient.setKeepAlive(3);
   mqttClient.setWill(TOP_STATUS, 1, true, (String("{\"ready\":") + String("false") + String("}")).c_str()); // topic, message, retain, QoS
   mqttClient.setServer(mqtt_server, mqtt_port);
   mqttClient.setClientId(WAND_CLIENT);
@@ -283,30 +313,6 @@ void setup() {
   mpu.resetFIFO();
   mpuInterrupt = false;
   ledControl.off_light();
-}
-
-void reconnect() {
-  ledControl.on_initialize_light();
-  mpu.setDMPEnabled(false);
-  mpu.resetFIFO();
-  while(!mqttClient.connected()){
-    Serial.println("Attempting MQTT connection...");
-    if (WiFi.status() != WL_CONNECTED) {
-      setup_wifi();
-    }
-    mqttClient.connect();
-    delay(1000);
-  };
-  mpu.setDMPEnabled(true);
-  delay(100);
-  mpu.resetFIFO();
-  mpuInterrupt = false;
-  mpuCount = 0;
-  if (drawingMode) {
-    ledControl.off_light();
-  } else {
-    ledControl.on_spell_light(charToColour(spellType), calcStrength(spinCount));
-  }
 }
 
 void loop() {
