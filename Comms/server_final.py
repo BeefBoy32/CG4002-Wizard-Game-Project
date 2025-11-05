@@ -4,9 +4,10 @@ import paho.mqtt.client as mqtt
 from collections import deque
 from ai_engine import infer as ai_infer, class_to_letter
 import numpy as np
+import ssl
 
 BROKER = "localhost"   # "localhost" if shift to ultra96, laptopIP if on laptop
-PORT   = 1883            # your mosquitto port
+PORT   = 8883            # your mosquitto port
 
 
 # Global variables for testing 
@@ -526,6 +527,20 @@ def main():
     cli.on_connect = on_connect
     cli.on_message = on_message
     cli.on_disconnect = on_disconnect
+
+    # implement encryption
+    CA  = "/home/xilinx/certs/ca.crt"
+    CRT = "/home/xilinx/certs/u96.crt"
+    KEY = "/home/xilinx/certs/u96.key"
+
+    cli.tls_set(
+        ca_certs=CA,
+        certfile=CRT,
+        keyfile=KEY,
+        tls_version=ssl.PROTOCOL_TLSv1_2
+    )
+    cli.tls_insecure_set(False)
+
     cli.connect(BROKER, PORT, 60)
     print("Waiting for wands to connect...")
     cli.loop_start()
