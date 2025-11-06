@@ -433,28 +433,15 @@ def AILoopPlayer1():
         wand1_drawingMode.wait()
         if len(buf[1]) == WINDOW:
             with mpu1_lock:
-                window = np.array(buf[1]) # (60,6)
+                # Ensure data format matches ai_engine.py requirements:
+                window = np.array(buf[1], dtype=np.float32)  # (60,6)
+                if window.shape != (60, 6):
+                    window = window.reshape(60, 6)
             with AIModelUsed:
-                out = ai_infer(window)
+                # ai_infer returns (class_index, probs, letter)
+                cls_idx, probs, letter = ai_infer(window)
 
-            # normalize ai_infer output to a class index + optional vector
-            pred_idx = None
-            vec = None
-            if isinstance(out, tuple):
-                # if first element is logits/probs vector, use argmax of that
-                first = out[0]
-                if isinstance(first, (list, np.ndarray)) and np.size(first) > 1:
-                    vec = np.array(first, dtype=np.float32).reshape(-1)
-                    pred_idx = int(np.argmax(vec))
-                else:
-                    pred_idx = int(first)
-            elif isinstance(out, (list, np.ndarray)):
-                vec = np.array(out, dtype=np.float32).reshape(-1)
-                pred_idx = int(np.argmax(vec))
-            else:
-                pred_idx = int(out)
-            letter = class_to_letter(pred_idx)
-            #print(f"Prediction {predictionCount} made: {letter}")
+            #print(f"Prediction made: {letter}")
             if letter != 'U':
                 wand1_spell = letter
                 message = {        # keep if you still use numeric somewhere
@@ -473,27 +460,14 @@ def AILoopPlayer2():
         wand2_drawingMode.wait()
         if len(buf[2]) == WINDOW:
             with mpu2_lock:
-                window = np.array(buf[2]) # (60,6)
+                # Ensure data format matches ai_engine.py requirements:
+                window = np.array(buf[2], dtype=np.float32)  # (60,6)
+                if window.shape != (60, 6):
+                    window = window.reshape(60, 6)
             with AIModelUsed:
-                out = ai_infer(window)
+                # ai_infer returns (class_index, probs, letter)
+                cls_idx, probs, letter = ai_infer(window)
 
-            # normalize ai_infer output to a class index + optional vector
-            pred_idx = None
-            vec = None
-            if isinstance(out, tuple):
-                # if first element is logits/probs vector, use argmax of that
-                first = out[0]
-                if isinstance(first, (list, np.ndarray)) and np.size(first) > 1:
-                    vec = np.array(first, dtype=np.float32).reshape(-1)
-                    pred_idx = int(np.argmax(vec))
-                else:
-                    pred_idx = int(first)
-            elif isinstance(out, (list, np.ndarray)):
-                vec = np.array(out, dtype=np.float32).reshape(-1)
-                pred_idx = int(np.argmax(vec))
-            else:
-                pred_idx = int(out)
-            letter = class_to_letter(pred_idx)
             if letter != 'U':
                 wand2_spell = letter
                 message = {        # keep if you still use numeric somewhere
