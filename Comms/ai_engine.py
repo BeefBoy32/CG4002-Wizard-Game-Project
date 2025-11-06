@@ -15,6 +15,12 @@ _CLASS_TO_LETTER = {
     0:'C', 1:'I', 2:'U', 3:'S', 4:'T', 5:'W', 6:'Z'
 }
 
+# --- Load global mean and std from file (generated in training) ---
+_data = np.load("/home/xilinx/mean_std.npy", allow_pickle=True).item()
+_channel_mean = _data["mean"].astype(np.float32)
+_channel_std  = _data["std"].astype(np.float32)
+_channel_std[_channel_std < 1e-6] = 1.0
+
 # Allocate buffers
 _inp = allocate(shape=(np.prod(_IN_SHAPE),), dtype=np.float32)
 _out = allocate(shape=(_OUT_DIM,), dtype=np.float32)
@@ -22,29 +28,16 @@ _out = allocate(shape=(_OUT_DIM,), dtype=np.float32)
 def class_to_letter(idx: int) -> str:
     return _CLASS_TO_LETTER.get(int(idx), 'U')
 
-def _softmax(x: np.ndarray) -> np.ndarray:
-    x = x - np.max(x)
-    e = np.exp(x, dtype=np.float32)
-    return e / np.sum(e)
-
 def preprocess_window(window_60x6: np.ndarray) -> np.ndarray:
     """
-    Apply IMU preprocessing as used during model training.
-    - Normalize yaw/pitch/roll to [-1, 1]
-    - Normalize accelerometer values
-    - Per-window standardization (StandardScaler)
-    - Clip extreme values
+    Apply global normalization as used during model training.
+    - Data format: [yaw, pitch, roll, accelx, accely, accelz]
+    - Orientation in degrees (raw values, not normalized)
+    - Acceleration in g units (raw values, not normalized)
     """
     arr = window_60x6.astype(np.float32, copy=False)
-    arr[:, :3] /= 180.0      # yaw, pitch, roll
-    arr[:, 3:] /= 16384.0    # accelx, accely, accelz
-
-    mean = np.mean(arr, axis=0, keepdims=True)
-    std = np.std(arr, axis=0, keepdims=True)
-    std[std < 1e-6] = 1e-6
-    arr = (arr - mean) / std
-
-    np.clip(arr, -4.0, 4.0, out=arr)
+    arr = (arr - _channel_mean) / _channel_std
+    
     return arr
 
 # Inference function (single call)
@@ -65,7 +58,8 @@ def infer(window_60x6: np.ndarray):
     mpu_data = preprocess_window(window_60x6)
 
     # Step 2: Load into DMA buffers
-    _inp[:] = mpu_data.flatten()
+    flattened = mpu_data.flatten(order='C')  # Row-major (C-style) flattening
+    _inp[:] = flattened
     _inp.flush()
     _out.fill(0)
     _out.invalidate()
@@ -78,8 +72,8 @@ def infer(window_60x6: np.ndarray):
     _dma.sendchannel.wait()
     _dma.recvchannel.wait()
 
-    # Step 4: Compute softmax + return results
+    # Step 4: Read results (C++ already applies softmax, so output is already probabilities)
     _out.invalidate()
-    probs = _softmax(_out)
+    probs = _out.copy()  # Already softmax probabilities from C++ model
     cls = int(np.argmax(probs))
     return cls, probs, class_to_letter(cls)
