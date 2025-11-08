@@ -1,0 +1,142 @@
+<!doctype html>
+<html>
+
+<head>
+    <meta charset="utf-8" />
+    <title>Wizard Game Live</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+        body {
+            font-family: system-ui, sans-serif;
+            margin: 24px;
+        }
+
+        .row {
+            display: flex;
+            gap: 24px;
+            align-items: center;
+        }
+
+        .card {
+            padding: 16px;
+            border: 1px solid #ddd;
+            border-radius: 12px;
+            min-width: 240px;
+        }
+
+        .spell {
+            font-size: 64px;
+            font-weight: 700;
+            line-height: 1;
+        }
+
+        .ok {
+            color: #1b9e3f;
+        }
+
+        .warn {
+            color: #e08600;
+        }
+
+        .bad {
+            color: #c92a2a;
+        }
+
+        .dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 8px;
+        }
+
+        .dot.on {
+            background: #1b9e3f;
+        }
+
+        .dot.off {
+            background: #c92a2a;
+        }
+
+        .muted {
+            color: #666;
+            font-size: 12px;
+        }
+
+        .cell {
+            min-height: 64px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px dashed #ccc;
+            border-radius: 10px;
+            font-weight: 700;
+            font-size: 32px;
+        }
+    </style>
+</head>
+
+<body>
+    <h1>Wizard Game — Live</h1>
+    <div class="row">
+        <div class="card">
+            <div><span id="connDot" class="dot off"></span><strong>Broker</strong> <span
+                    id="connTxt">disconnected</span></div>
+            <div class="muted">via MQTT over WebSockets</div>
+        </div>
+        <div class="card">
+            <div><strong>U96 Ready:</strong> <span id="u96Ready">false</span></div>
+            <div><strong>Wand1 Drawing:</strong> <span id="w1Draw">false</span></div>
+            <div><strong>Wand2 Drawing:</strong> <span id="w2Draw">false</span></div>
+        </div>
+    </div>
+
+    <div class="row" style="margin-top:24px;">
+        <div class="card">
+            <div>Wand 1 Battery</div>
+            <div id="batt1" class="spell ok">--%</div>
+        </div>
+        <div class="card">
+            <div>Wand 2 Battery</div>
+            <div id="batt2" class="spell ok">--%</div>
+        </div>
+    </div>
+
+    <div class="row" style="margin-top:24px;">
+        <div class="card">
+            <div>Last Spell — Wand 1</div>
+            <div id="spell1" class="spell">U</div>
+        </div>
+        <div class="card">
+            <div>Last Spell — Wand 2</div>
+            <div id="spell2" class="spell">U</div>
+        </div>
+
+    </div>
+    <div class="row" style="margin-top:24px;">
+        <div class="card" style="flex:1;">
+            <div style="display:flex;justify-content:space-between;align-items:center;">
+                <strong>Battlefield</strong>
+                <div>Health:
+                    <span id="p1hp" class="spell ok" style="font-size:28px;">3</span> :
+                    <span id="p2hp" class="spell ok" style="font-size:28px;">3</span>
+                </div>
+            </div>
+            <div id="board" style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-top:12px;">
+                <div class="cell"></div>
+                <div class="cell"></div>
+                <div class="cell"></div>
+                <div class="cell"></div>
+                <div class="cell"></div>
+            </div>
+            <div id="result" class="muted" style="margin-top:8px;"></div>
+        </div>
+    </div>
+
+
+    <!-- MQTT.js from CDN -->
+    <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+    <script src="./app.js"></script>
+</body>
+
+</html>
