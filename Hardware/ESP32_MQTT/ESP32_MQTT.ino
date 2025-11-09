@@ -14,6 +14,7 @@ volatile bool drawingMode = true; // When true, send MPU data to Ultra96, else d
 volatile bool transitionMode = false;
 bool wandReady = true;
 volatile bool otherReady = false;
+volatile bool visualiserReady = false;
 volatile bool u96Ready = false;
 int spinCount = 0;
 volatile char spellType = 'U';
@@ -71,6 +72,7 @@ const char* TOP_CAST = WAND ? "wand1/cast" : "wand2/cast";
 const char* TOP_OTHER = WAND ? "wand2/status" : "wand1/status";
 const char* TOP_U96 = "u96/status";
 const char* TOP_SPELL = WAND ? "u96/wand1/spell" : "u96/wand2/spell";
+const char* TOP_VISUALISER = "visualiser/status";
 
 // MPU6050, DMP
 MPU6050 mpu;
@@ -241,6 +243,9 @@ void onMqttMessage(
     else if (strcmp(topic, TOP_OTHER) == 0) {
       otherReady = doc["ready"];
     }
+    else if (strcmp(topic, TOP_VISUALISER) == 0) {
+      visualiserReady = doc["ready"];
+    }
   } else {
     Serial.print("Failed to parse JSON: ");
     Serial.println(error.c_str());
@@ -385,7 +390,7 @@ void loop() {
   }
 
   //Pause here if other wand disconnect or U96 disconnect
-  wandReady = otherReady && u96Ready;
+  wandReady = otherReady && u96Ready && visualiserReady;
   if(!wandReady) {
     ledControl.on_initialize_light();
     mpu.setDMPEnabled(false);
@@ -394,7 +399,7 @@ void loop() {
       if (!mqttClient.connected()) {
         reconnect();
       }
-      wandReady = otherReady && u96Ready;
+      wandReady = otherReady && u96Ready && visualiserReady;
     }
     mpu.setDMPEnabled(true);
     delay(100);
