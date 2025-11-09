@@ -132,9 +132,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
             case TOP.GAME:
                 // { p1_health, p2_health, lanes:[...], ts }
-                setHP($("p1hp"), js.p1_health);
-                setHP($("p2hp"), js.p2_health);
-                renderBoard(js.lanes);
+                setHP($("p1hp"), js.player1_hp);
+                setHP($("p2hp"), js.player2_hp);
+                renderBoard(js.battlefield);
                 $("result").textContent = "";
                 break;
 
