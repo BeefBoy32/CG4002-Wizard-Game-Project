@@ -19,7 +19,7 @@ int spinCount = 0;
 volatile char spellType = 'U';
 
 // Wi-Fi credentials
-#define WAND false // True if Wand 1, False if Wand 2
+#define WAND true // True if Wand 1, False if Wand 2
 //Kan Wu
 
 /*
@@ -41,10 +41,12 @@ const char* password = "CmWEhyHqgKp3";
 const char* mqtt_server = "192.168.1.12"; // replace with your laptop's IP 192.168.1.12
 */
 
+
+/*
 const char* ssid = "shree"; 
 const char* password = "shreedhee12";
 const char* mqtt_server = "172.20.10.5"; // replace with your laptop's IP
-
+*/
 
 /*
 const char* ssid = "Pizza Hut x Dominos Free Wifi"; 
@@ -56,6 +58,10 @@ const char* ssid = "iPhone";
 const char* password = "A1234567a";
 const char* mqtt_server = "172.20.10.10"; // replace with your laptop's IP
 */
+
+const char* ssid = "Karmui"; 
+const char* password = "151122Kanwu";
+const char* mqtt_server = "10.51.184.118"; // replace with your laptop's IP
 
 const int mqtt_port = 8883;
 const char* WAND_CLIENT = WAND ? "wand1-client" : "wand2-client";

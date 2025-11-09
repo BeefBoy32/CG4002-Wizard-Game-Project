@@ -12,6 +12,8 @@ const TOP = {
     W2_BATT: "wand2/batt",
     W1_SPELL: "u96/wand1/spell",
     W2_SPELL: "u96/wand2/spell",
+    W1_STATUS: "wand1/status",
+    W2_STATUS: "wand2/status",
     GAME: "u96/game",
     GAME_END: "u96/game_end",
 };
@@ -30,17 +32,59 @@ function setBatt(el, pct) {
     el.className = "spell " + (v >= 50 ? "ok" : v >= 20 ? "warn" : "bad");
 }
 
-// Render the 5 battlefield cells with just the spell letter (left→right)
-function renderBoard(lanes) {
+function toStrengthLevel(s) {
+    const v = Number(s);
+    if (!Number.isFinite(v)) return 1;
+    if (v <= 5) return Math.min(5, Math.max(1, Math.round(v)));
+    // percent-style → 5 buckets
+    if (v >= 80) return 5;
+    if (v >= 60) return 4;
+    if (v >= 40) return 3;
+    if (v >= 20) return 2;
+    return 1;
+}
+
+function playerClass(pid) {
+    return pid === 1 ? "p1" : "p2";
+}
+
+
+function setSpellDisplay(el, letter, strength, pid) {
+    const lvl = toStrengthLevel(strength);
+    el.textContent = letter || "U";
+    el.className = `spell ${playerClass(pid)} spell-lv${lvl}`;
+}
+
+
+// Render the 5 battlefield cells.
+// lanes[i] = [playerId, letter, strength] or null
+function renderBoard(lanes = []) {
     const board = $("board");
     if (!board) return;
+
     const cells = Array.from(board.querySelectorAll(".cell"));
     for (let i = 0; i < cells.length; i++) {
-        const slot = lanes?.[i];
-        // slot is like "W, 3" → show just the letter
-        cells[i].textContent = slot ? String(slot).split(",")[0] : "";
+        const cell = cells[i];
+        const slot = lanes[i];
+
+        if (Array.isArray(slot)) {
+            const pid = slot[0];
+            const letter = slot[1];
+            const strength = slot[2];
+            const lvl = toStrengthLevel(strength);
+
+            cell.textContent = `${letter} ${strength ?? lvl}`;
+            cell.className = `cell ${playerClass(pid)} spell-lv${lvl}`;
+            cell.style.transition = "font-size 120ms ease";
+        } else {
+            cell.textContent = "";
+            cell.className = "cell";
+            cell.style.transition = "";
+        }
     }
 }
+
+
 
 // ---------- main ----------
 document.addEventListener("DOMContentLoaded", () => {
@@ -63,6 +107,7 @@ document.addEventListener("DOMContentLoaded", () => {
             TOP.W1_BATT, TOP.W2_BATT,
             TOP.W1_SPELL, TOP.W2_SPELL,
             TOP.GAME, TOP.GAME_END,
+            TOP.W1_STATUS, TOP.W2_STATUS,
         ]);
     });
 
@@ -86,8 +131,14 @@ document.addEventListener("DOMContentLoaded", () => {
         switch (topic) {
             case TOP.U96_STATUS:
                 $("u96Ready").textContent = js.ready;
-                $("w1Draw").textContent = js.wand1_state?.drawingMode ?? false;
-                $("w2Draw").textContent = js.wand2_state?.drawingMode ?? false;
+                break;
+
+            case TOP.W1_STATUS:
+                $("w1Ready").textContent = js.ready;
+                break;
+
+            case TOP.W2_STATUS:
+                $("w2Ready").textContent = js.ready;
                 break;
 
             case TOP.W1_BATT:
@@ -108,9 +159,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
             case TOP.GAME:
                 // { p1_health, p2_health, lanes:[...], ts }
-                setHP($("p1hp"), js.p1_health);
-                setHP($("p2hp"), js.p2_health);
-                renderBoard(js.lanes);
+                setHP($("p1hp"), js.player1_hp);
+                setHP($("p2hp"), js.player2_hp);
+                renderBoard(js.battlefield);
                 $("result").textContent = "";
                 break;
 
