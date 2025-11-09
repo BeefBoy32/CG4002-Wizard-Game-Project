@@ -30,6 +30,7 @@ pause = threading.Semaphore(0)
 pausedTime = 0
 wand1IsReady = threading.Event()
 wand2IsReady = threading.Event()
+visualiserIsReady = threading.Event()
 mpu1_lock = threading.Lock()
 mpu2_lock = threading.Lock()
 spells_lock = threading.Lock()
@@ -56,11 +57,14 @@ T_WAND1_MPU = "wand1/mpu"
 T_WAND2_MPU = "wand2/mpu"
 T_WAND1_CAST = "wand1/cast"
 T_WAND2_CAST = "wand2/cast"
+T_VISUALISER_STATUS = "viualiser/status"
 
 # Topic to publish to
 T_U96_STATUS = "u96/status"
+T_U96_GAME = "u96/game"
 T_U96_WAND1_SPELL = "u96/wand1/spell"
 T_U96_WAND2_SPELL = "u96/wand2/spell"
+T_U96_GAME_END = "u96/game_end"
 
 
 
@@ -68,6 +72,7 @@ def on_connect(client, userdata, flags, rc):
     client.subscribe([
         (T_WAND1_STATUS, 1),
         (T_WAND2_STATUS, 1),
+        (T_VISUALISER_STATUS, 1),
         (T_WAND1_BATT, 1),
         (T_WAND2_BATT, 1),
         (T_WAND1_MPU, 0),
@@ -102,6 +107,13 @@ def on_message(client, _, msg):
                 wand2IsReady.clear()
                 pause.release() 
 
+        if topic == T_VISUALISER_STATUS:
+            if msgJS["ready"]:
+                visualiserIsReady.set()
+            else: 
+                visualiserIsReady.clear()
+                pause.release()
+
         elif topic == T_WAND1_MPU:
             # TODO add to wand1_MPU deque
             if gameReady.is_set() and wand1_drawingMode.is_set():
@@ -118,14 +130,17 @@ def on_message(client, _, msg):
 
         elif topic == T_WAND1_BATT:            
             battery_percent1 = msgJS["percent"]
+            '''
             if gameReady.is_set():
                 modifyBatt(1)
-                
+            '''   
 
         elif topic == T_WAND2_BATT:
             battery_percent2 = msgJS["percent"]
+            '''
             if gameReady.is_set():
                 modifyBatt(2)
+            '''
 
         elif topic == T_WAND1_CAST:
             with mpu1_lock:
@@ -297,13 +312,11 @@ def calculatePosition(time, currentTime, player):
     return position if player else 4 - position
 
 def getDisplayFromSpells(player1_health, player2_health, spell_display):
-    image = f"P1:{player1_health}"
-    for spell in spell_display:
-        if spell:
-            image += spell
-        else:
-            image += "    "
-    image += f"P2:{player2_health}"
+    image = {
+        "player1_hp": player1_health,
+        "player2_hp": player2_health,
+        "battlefield": spell_display
+    }
     return image
 
 def modifyBatt(wand_num):
@@ -320,12 +333,13 @@ def modifyBatt(wand_num):
             sys.stdout.write("\033[2A")
 
 def game_loop():
+    global wand1_spell, wand2_spell
     player1_health = 3
     player2_health = 3
-    initial_spell_display = [None] * 5
-    image = getDisplayFromSpells(player1_health, player2_health, initial_spell_display)
-    print(image, end = "\r")
-    sys.stdout.flush()
+    # initial_spell_display = [None] * 5
+    # image = getDisplayFromSpells(player1_health, player2_health, initial_spell_display)
+    # print(image, end = "\r")
+    # sys.stdout.flush()
     while not gameEnd.is_set():
         gameReady.wait()
         currentTime  = time.time()
@@ -360,30 +374,51 @@ def game_loop():
         for spell_info in player2_spells:
             spellType = spell_info["spell_type"]
             spellPosition = calculatePosition(spell_info["time"], currentTime, False)
-            spell_display[spellPosition] = f"{spellType}, {spell_info['strength']}"  
+            spell_display[spellPosition] = (2, spellType, spell_info['strength'])  
         
         for spell_info in player1_spells:
             spellType = spell_info["spell_type"]
             spellPosition = calculatePosition(spell_info["time"], currentTime, True)
-            spell_display[spellPosition] = f"{spellType}, {spell_info['strength']}" 
+            spell_display[spellPosition] = (1, spellType, spell_info['strength']) 
 
         image = getDisplayFromSpells(player1_health, player2_health, spell_display)
 
         if not gameEnd.is_set():
+            # TODO Send data to visualiser
+            cli.publish(T_U96_GAME, json.dumps(image), 0, True)
+            '''
             with display_lock:
                 print(image, end = "\r")
                 sys.stdout.flush()
-
+            '''
         time.sleep(UPDATE_INTERVAL)
 
-    print(f"Game End: Player {1 if player2_health == 0 else 2}")
+    #print(f"Game End: Player {1 if player2_health == 0 else 2}")
+    wand1_spell = "U"
+    wand2_spell = "U"
+    message = {
+        "ready":False,
+        "wand1_state": {
+            "drawingMode":wand1_drawingMode.is_set(),
+            "spell":wand1_spell,
+        },
+        "wand2_state": {
+            "drawingMode":wand2_drawingMode.is_set(),
+            "spell":wand2_spell,
+        }
+    }
+    cli.publish(T_U96_STATUS, json.dumps(message), 0, True)
+    message = {
+        "winner": 1 if player2_health == 0 else 2
+    }
+    cli.publish(T_U96_GAME_END, json.dumps(message), 1, True)
 
 def checkPauseLoop():
     while True:
         pause.acquire()
         pauseLock.acquire()
         global pausedTime
-        if (not(wand2IsReady.is_set() and wand1IsReady.is_set() and connected.is_set())):       
+        if (not(wand2IsReady.is_set() and wand1IsReady.is_set() and connected.is_set() and visualiserIsReady.is_set())):       
             gameReady.clear()
             pausedTime = time.time()
             message = {
@@ -407,6 +442,7 @@ def updateTimeLoop():
         pauseState.wait()
         wand1IsReady.wait() 
         wand2IsReady.wait()
+        visualiserIsReady.wait()
         connected.wait()
         with mpu1_lock:
                 if len(buf[1]):
@@ -548,6 +584,7 @@ def main():
     wand2_drawingMode.set()
     wand1IsReady.wait()
     wand2IsReady.wait()
+    visualiserIsReady.wait()
     while(not(battery_percent1 and battery_percent2)):
         continue
     message = {
@@ -569,8 +606,10 @@ def main():
     threading.Thread(target=game_loop, daemon=True).start()
     threading.Thread(target=AILoopPlayer1, daemon=True).start()
     threading.Thread(target=AILoopPlayer2, daemon=True).start()
+    '''
     modifyBatt(1)
     modifyBatt(2)
+    '''
     while True:
         continue
 

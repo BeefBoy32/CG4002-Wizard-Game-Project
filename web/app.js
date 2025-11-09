@@ -8,12 +8,15 @@ const PROTO = "ws";                             // use "wss" if you enable TLS f
 // ---------- topics ----------
 const TOP = {
     U96_STATUS: "u96/status",
+    W1_STATUS: "wand1/status",
+    W2_STATUS: "wand2/status",
     W1_BATT: "wand1/batt",
     W2_BATT: "wand2/batt",
     W1_SPELL: "u96/wand1/spell",
     W2_SPELL: "u96/wand2/spell",
     GAME: "u96/game",
     GAME_END: "u96/game_end",
+    VISUALISER_STATUS: "visualiser/status",
 };
 
 // ---------- helpers ----------
@@ -52,6 +55,13 @@ document.addEventListener("DOMContentLoaded", () => {
         clientId: "web-" + Math.random().toString(16).slice(2),
         clean: true,
         reconnectPeriod: 1000,
+
+        will: {
+            topic: TOP.VISUALISER_STATUS,
+            payload: JSON.stringify({ ready: false }),
+            qos: 1,
+            retain: true,
+        },
     });
 
     client.on("connect", () => {
@@ -59,20 +69,29 @@ document.addEventListener("DOMContentLoaded", () => {
         $("connTxt").textContent = "connected";
 
         client.subscribe([
-            TOP.U96_STATUS,
-            TOP.W1_BATT, TOP.W2_BATT,
-            TOP.W1_SPELL, TOP.W2_SPELL,
-            TOP.GAME, TOP.GAME_END,
+            { topic: TOP.U96_STATUS, qos: 1 },
+            { topic: TOP.W1_STATUS, qos: 1 },
+            { topic: TOP.W2_STATUS, qos: 1 },
+            { topic: TOP.W1_BATT, qos: 1 },
+            { topic: TOP.W2_BATT, qos: 1 },
+            { topic: TOP.W1_SPELL, qos: 2 },
+            { topic: TOP.W2_SPELL, qos: 2 },
+            { topic: TOP.GAME, qos: 0 },
+            { topic: TOP.GAME_END, qos: 1 },        
         ]);
+
+        client.publish(TOP.VISUALISER_STATUS, JSON.stringify({ ready: true }), { qos: 1, retain: true,});
     });
 
     client.on("reconnect", () => {
         $("connDot").className = "dot off";
         $("connTxt").textContent = "reconnecting…";
     });
+
     client.on("close", () => {
         $("connDot").className = "dot off";
         $("connTxt").textContent = "disconnected";
+        client.publish(TOP.VISUALISER_STATUS, JSON.stringify({ ready: false }), { qos: 1, retain: true,});
     });
 
     client.on("message", (topic, payload) => {
@@ -86,8 +105,13 @@ document.addEventListener("DOMContentLoaded", () => {
         switch (topic) {
             case TOP.U96_STATUS:
                 $("u96Ready").textContent = js.ready;
-                $("w1Draw").textContent = js.wand1_state?.drawingMode ?? false;
-                $("w2Draw").textContent = js.wand2_state?.drawingMode ?? false;
+            
+            case TOP.W1_STATUS:
+                $("w1Ready").textContent = js.ready;
+                break;
+
+            case TOP.W2_STATUS:
+                $("w2Ready").textContent = js.ready;
                 break;
 
             case TOP.W1_BATT:
@@ -108,9 +132,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
             case TOP.GAME:
                 // { p1_health, p2_health, lanes:[...], ts }
-                setHP($("p1hp"), js.p1_health);
-                setHP($("p2hp"), js.p2_health);
-                renderBoard(js.lanes);
+                setHP($("p1hp"), js.player1_hp);
+                setHP($("p2hp"), js.player2_hp);
+                renderBoard(js.battlefield);
                 $("result").textContent = "";
                 break;
 
