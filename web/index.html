@@ -73,6 +73,10 @@
             font-weight: 700;
             font-size: 32px;
         }
+
+        .wiz-flash {
+            filter: drop-shadow(0 0 12px #fff);
+        }
     </style>
 </head>
 
@@ -86,8 +90,8 @@
         </div>
         <div class="card">
             <div><strong>U96 Ready:</strong> <span id="u96Ready">false</span></div>
-            <div><strong>Wand1 Drawing:</strong> <span id="w1Draw">false</span></div>
-            <div><strong>Wand2 Drawing:</strong> <span id="w2Draw">false</span></div>
+            <div><strong>Wand1 Ready:</strong> <span id="w1Ready">false</span></div>
+            <div><strong>Wand2 Ready:</strong> <span id="w2Ready">false</span></div>
         </div>
     </div>
 
@@ -122,6 +126,11 @@
                     <span id="p2hp" class="spell ok" style="font-size:28px;">3</span>
                 </div>
             </div>
+
+            <canvas id="arena" width="900" height="260"
+                style="width:100%;height:auto;border:1px dashed #ccc;border-radius:10px;margin-top:12px;background:#0b0f1a;"></canvas>
+            <div id="result" class="muted" style="margin-top:8px;"></div>
+
             <div id="board" style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-top:12px;">
                 <div class="cell"></div>
                 <div class="cell"></div>
