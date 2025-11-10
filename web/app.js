@@ -73,7 +73,7 @@ function renderBoard(lanes = []) {
             const strength = slot[2];
             const lvl = toStrengthLevel(strength);
 
-            cell.textContent = `${letter} ${strength ?? lvl}`;
+            cell.textContent = `${letter}`;
             cell.className = `cell ${playerClass(pid)} spell-lv${lvl}`;
             cell.style.transition = "font-size 120ms ease";
         } else {
