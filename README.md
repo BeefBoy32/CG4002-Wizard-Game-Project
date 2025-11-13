@@ -1,5 +1,12 @@
-# Welcome to Wizard Game, a 2 player game where players draw spells, charge them and cast them to beat the opponent.
+# Wizard Game IoT project
 ![Alt text](visualiser.png)
+
+## MQTT-Based Communication System
+ In the Wizard Game, the interaction between the U96 development board (acting as the central game server) and the two player wands (acting as IoT clients) is managed using the MQTT (Message Queuing Telemetry Transport) protocol. MQTT provides a lightweight, publish–subscribe messaging structure that ensures reliable, low-latency communication between devices — ideal for real-time gameplay.
+
+## System Architecture
+![Alt text](system_architecture.png)
+
 ## File Structure
 1. AI
     1. Software
