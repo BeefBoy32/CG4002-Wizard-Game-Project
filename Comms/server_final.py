@@ -4,9 +4,10 @@ import paho.mqtt.client as mqtt
 from collections import deque
 from ai_engine import infer as ai_infer, class_to_letter
 import numpy as np
+import ssl
 
 BROKER = "localhost"   # "localhost" if shift to ultra96, laptopIP if on laptop
-PORT   = 1883            # your mosquitto port
+PORT   = 8883            # your mosquitto port
 
 
 # Global variables for testing 
@@ -58,8 +59,10 @@ T_WAND2_CAST = "wand2/cast"
 
 # Topic to publish to
 T_U96_STATUS = "u96/status"
+T_U96_GAME = "u96/game"
 T_U96_WAND1_SPELL = "u96/wand1/spell"
 T_U96_WAND2_SPELL = "u96/wand2/spell"
+T_U96_GAME_END = "u96/game_end"
 
 
 
@@ -114,17 +117,20 @@ def on_message(client, _, msg):
                 with mpu2_lock:
                     buf[2].append([float(msgJS["yaw"]), float(msgJS["pitch"]), float(msgJS["roll"]),
                                 float(msgJS["accelx"]), float(msgJS["accely"]), float(msgJS["accelz"])])
-
+                    
         elif topic == T_WAND1_BATT:            
             battery_percent1 = msgJS["percent"]
+            '''
             if gameReady.is_set():
                 modifyBatt(1)
-                
+            '''   
 
         elif topic == T_WAND2_BATT:
             battery_percent2 = msgJS["percent"]
+            '''
             if gameReady.is_set():
                 modifyBatt(2)
+            '''
 
         elif topic == T_WAND1_CAST:
             with mpu1_lock:
@@ -296,13 +302,11 @@ def calculatePosition(time, currentTime, player):
     return position if player else 4 - position
 
 def getDisplayFromSpells(player1_health, player2_health, spell_display):
-    image = f"P1:{player1_health}"
-    for spell in spell_display:
-        if spell:
-            image += spell
-        else:
-            image += "    "
-    image += f"P2:{player2_health}"
+    image = {
+        "player1_hp": player1_health,
+        "player2_hp": player2_health,
+        "battlefield": spell_display
+    }
     return image
 
 def modifyBatt(wand_num):
@@ -319,12 +323,13 @@ def modifyBatt(wand_num):
             sys.stdout.write("\033[2A")
 
 def game_loop():
+    global wand1_spell, wand2_spell
     player1_health = 3
     player2_health = 3
-    initial_spell_display = [None] * 5
-    image = getDisplayFromSpells(player1_health, player2_health, initial_spell_display)
-    print(image, end = "\r")
-    sys.stdout.flush()
+    # initial_spell_display = [None] * 5
+    # image = getDisplayFromSpells(player1_health, player2_health, initial_spell_display)
+    # print(image, end = "\r")
+    # sys.stdout.flush()
     while not gameEnd.is_set():
         gameReady.wait()
         currentTime  = time.time()
@@ -359,23 +364,44 @@ def game_loop():
         for spell_info in player2_spells:
             spellType = spell_info["spell_type"]
             spellPosition = calculatePosition(spell_info["time"], currentTime, False)
-            spell_display[spellPosition] = f"{spellType}, {spell_info['strength']}"  
+            spell_display[spellPosition] = (2, spellType, spell_info['strength'])  
         
         for spell_info in player1_spells:
             spellType = spell_info["spell_type"]
             spellPosition = calculatePosition(spell_info["time"], currentTime, True)
-            spell_display[spellPosition] = f"{spellType}, {spell_info['strength']}" 
+            spell_display[spellPosition] = (1, spellType, spell_info['strength']) 
 
         image = getDisplayFromSpells(player1_health, player2_health, spell_display)
-
+        cli.publish(T_U96_GAME, json.dumps(image), 0, True)
+        '''
         if not gameEnd.is_set():
+            # TODO Send data to visualiser
+            cli.publish(T_U96_GAME, json.dumps(image), 0, True)
             with display_lock:
                 print(image, end = "\r")
                 sys.stdout.flush()
-
+        '''
         time.sleep(UPDATE_INTERVAL)
 
-    print(f"Game End: Player {1 if player2_health == 0 else 2}")
+    #print(f"Game End: Player {1 if player2_health == 0 else 2}")
+    wand1_spell = "U"
+    wand2_spell = "U"
+    message = {
+        "ready":False,
+        "wand1_state": {
+            "drawingMode":wand1_drawingMode.is_set(),
+            "spell":wand1_spell,
+        },
+        "wand2_state": {
+            "drawingMode":wand2_drawingMode.is_set(),
+            "spell":wand2_spell,
+        }
+    }
+    cli.publish(T_U96_STATUS, json.dumps(message), 0, True)
+    message = {
+        "winner": 1 if player2_health == 0 else 2
+    }
+    cli.publish(T_U96_GAME_END, json.dumps(message), 1, True)
 
 def checkPauseLoop():
     while True:
@@ -500,6 +526,20 @@ def main():
     cli.on_connect = on_connect
     cli.on_message = on_message
     cli.on_disconnect = on_disconnect
+
+    # implement encryption
+    CA  = "/home/xilinx/certs/ca.crt"
+    CRT = "/home/xilinx/certs/u96.crt"
+    KEY = "/home/xilinx/certs/u96.key"
+
+    cli.tls_set(
+        ca_certs=CA,
+        certfile=CRT,
+        keyfile=KEY,
+        tls_version=ssl.PROTOCOL_TLSv1_2
+    )
+    cli.tls_insecure_set(False)
+
     cli.connect(BROKER, PORT, 60)
     print("Waiting for wands to connect...")
     cli.loop_start()
@@ -528,8 +568,10 @@ def main():
     threading.Thread(target=game_loop, daemon=True).start()
     threading.Thread(target=AILoopPlayer1, daemon=True).start()
     threading.Thread(target=AILoopPlayer2, daemon=True).start()
+    '''
     modifyBatt(1)
     modifyBatt(2)
+    '''
     while True:
         continue
 

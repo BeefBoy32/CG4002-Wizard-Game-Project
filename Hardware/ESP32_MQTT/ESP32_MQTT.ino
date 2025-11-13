@@ -7,6 +7,7 @@
 #include <ArduinoJson.h>
 #include "MAX17043.h"
 #include <espMqttClient.h>
+#include <time.h>
 
 // GLOBAL VARIABLES
 volatile bool drawingMode = true; // When true, send MPU data to Ultra96, else detect if there is spinning and thrusting to cast the spell
@@ -27,10 +28,18 @@ const char* password = "151122Kanwu";
 const char* mqtt_server = "172.20.10.4"; // replace with your laptop's IP
 */
 
+/*
+const char* ssid = "Karmui";
+const char* password = "151122Kanwu";
+const char* mqtt_server = "172.20.10.5"; // replace with your laptop's IP
+*/
 
+
+/*
 const char* ssid = "SINGTEL-3FC0";
 const char* password = "CmWEhyHqgKp3";
 const char* mqtt_server = "192.168.1.12"; // replace with your laptop's IP 192.168.1.12
+*/
 
 
 /*
@@ -50,9 +59,13 @@ const char* password = "A1234567a";
 const char* mqtt_server = "172.20.10.10"; // replace with your laptop's IP
 */
 
-const int mqtt_port = 1883;
+const char* ssid = "Karmui"; 
+const char* password = "151122Kanwu";
+const char* mqtt_server = "10.51.184.118"; // replace with your laptop's IP
+
+const int mqtt_port = 8883;
 const char* WAND_CLIENT = WAND ? "wand1-client" : "wand2-client";
-espMqttClient mqttClient;
+espMqttClientSecure mqttClient;
 
 // 
 const char* TOP_STATUS = WAND ? "wand1/status" : "wand2/status";
@@ -101,6 +114,55 @@ Colour charToColour(char c) {
   }
 }
 
+// ===== TLS material =====
+static const char CA_PEM[] PROGMEM = R"(-----BEGIN CERTIFICATE-----
+MIIB4TCCAYegAwIBAgIUZN/pur63pto7ktsPQfeId8rxBXowCgYIKoZIzj0EAwIw
+RjELMAkGA1UEBhMCU0cxDzANBgNVBAoMBkNHNDAwMjEOMAwGA1UECwwFQ29tbXMx
+FjAUBgNVBAMMDUNHNDAwMi1Sb290Q0EwHhcNMjUxMTA0MDgxMjQ2WhcNMzUxMTAy
+MDgxMjQ2WjBGMQswCQYDVQQGEwJTRzEPMA0GA1UECgwGQ0c0MDAyMQ4wDAYDVQQL
+DAVDb21tczEWMBQGA1UEAwwNQ0c0MDAyLVJvb3RDQTBZMBMGByqGSM49AgEGCCqG
+SM49AwEHA0IABDPOmJ831+B1sUMSpgnc6KS7dXv3gPvGIwbWBd70HyyW8kwU4Ei2
+91iffgfwGqU2pehqVjgAf+1gV66i+/sSvBCjUzBRMB0GA1UdDgQWBBTwc2Quu7ty
+m8TICkwoY7liiYsNcDAfBgNVHSMEGDAWgBTwc2Quu7tym8TICkwoY7liiYsNcDAP
+BgNVHRMBAf8EBTADAQH/MAoGCCqGSM49BAMCA0gAMEUCIQDcULI5u1CQXBLolk0q
+KNkmMB0uQzVCAIbbVBZLvSIWZwIgfnQGh60Kh5QLvWI9cYYe78XkBqh2krtxKUlT
+RneiyAQ=
+-----END CERTIFICATE-----)";
+
+static const char CLIENT_CRT_PEM[] PROGMEM = R"(-----BEGIN CERTIFICATE-----
+MIIB1zCCAX2gAwIBAgIUZkKoqj3VkAt3MGI2mgcPiEpU8EcwCgYIKoZIzj0EAwIw
+RjELMAkGA1UEBhMCU0cxDzANBgNVBAoMBkNHNDAwMjEOMAwGA1UECwwFQ29tbXMx
+FjAUBgNVBAMMDUNHNDAwMi1Sb290Q0EwHhcNMjUxMTA0MTAwNDMyWhcNMjgwMjA3
+MTAwNDMyWjBNMQswCQYDVQQGEwJTRzEPMA0GA1UECgwGQ0c0MDAyMRAwDgYDVQQL
+DAdEZXZpY2VzMRswGQYDVQQDDBJVbHRyYTk2LUdhbWVFbmdpbmUwWTATBgcqhkjO
+PQIBBggqhkjOPQMBBwNCAATTPOHbACzpPepJukUDLMZM4Kk15el9Z40+MQ7QQmVi
+EGG6WiYgRPdqV6Fqu19CUq0Us5t4L+0CX3V0eoJkv5P1o0IwQDAdBgNVHQ4EFgQU
+xUAyBRfXZsDCm89gE0WinMRo8/swHwYDVR0jBBgwFoAU8HNkLru7cpvEyApMKGO5
+YomLDXAwCgYIKoZIzj0EAwIDSAAwRQIgKSScJ+sqWOEgm37CZ/dclrsYt3kWSA1V
+uZingHu7yeACIQClKj2OXzFhk2lnqMxTrvv3u0xQ0UZaH7xhWFQzqs45ug==
+-----END CERTIFICATE-----)";
+
+static const char CLIENT_KEY_PEM[] PROGMEM = R"(-----BEGIN EC PARAMETERS-----
+BggqhkjOPQMBBw==
+-----END EC PARAMETERS-----
+-----BEGIN EC PRIVATE KEY-----
+MHcCAQEEIL2yyQAdE5gBu4EVDgKGC69mPn/mVdt1w+aJMNEsupdFoAoGCCqGSM49
+AwEHoUQDQgAE0zzh2wAs6T3qSbpFAyzGTOCpNeXpfWeNPjEO0EJlYhBhulomIET3
+alehartfQlKtFLObeC/tAl91dHqCZL+T9Q==
+-----END EC PRIVATE KEY-----)";
+
+void ensure_time_synced() {
+  configTime(8 * 3600, 0, "pool.ntp.org", "time.nist.gov"); // GMT+8 offset; change if needed
+  time_t now = time(nullptr);
+  int tries = 0;
+  while (now < 1700000000 && tries < 50) { // wait until year ~2023+
+    delay(200);
+    now = time(nullptr);
+    tries++;
+  }
+  Serial.printf("[TLS] Time synced: %ld\n", now);
+}
+
 int calcStrength(int n) {
   if (n < 50) {
     return 1;
@@ -128,6 +190,7 @@ void setup_wifi()
     Serial.print(".");
   }
   Serial.println("\nWiFi connected");
+  ensure_time_synced();
 }
 
 void publish_batt() {
@@ -300,12 +363,18 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(MPU_INT_PIN), dmpDataReady, RISING);
   
   setup_wifi();
-  mqttClient.setKeepAlive(3);
+  mqttClient.setKeepAlive(1);
   mqttClient.setWill(TOP_STATUS, 1, true, (String("{\"ready\":") + String("false") + String("}")).c_str()); // topic, message, retain, QoS
   mqttClient.setServer(mqtt_server, mqtt_port);
   mqttClient.setClientId(WAND_CLIENT);
   mqttClient.onConnect(onMqttConnect);
   mqttClient.onMessage(onMqttMessage);
+
+  // --- TLS for espMqttClientSecure ---
+  mqttClient.setCACert(CA_PEM);
+  mqttClient.setCertificate(CLIENT_CRT_PEM);
+  mqttClient.setPrivateKey(CLIENT_KEY_PEM);
+  
   mqttClient.connect();
   
   mpu.setDMPEnabled(true);
@@ -410,13 +479,14 @@ void loop() {
         ledControl.on_spell_light(charToColour(spellType), calcStrength(spinCount));
       }
       if (accelReal.y / ACCEL_SENS <= -0.65 && calcStrength(spinCount) >= 2) {
+        ledControl.off_light();
         int strength = calcStrength(spinCount);
         Serial.print("Thrust detected, Strength: ");
         Serial.println(strength);
         drawingMode = true;
         spinCount = 0;
-        ledControl.off_light();
         publish_cast_data(strength);
+        delay(1000);
         mpu.resetFIFO();
         mpuInterrupt = false;
         mpuCount = 0;

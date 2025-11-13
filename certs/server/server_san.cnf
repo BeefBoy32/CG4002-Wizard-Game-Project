@@ -1,0 +1,17 @@
+[ req ]
+distinguished_name = dn
+[ dn ]
+
+[ req_ext ]
+basicConstraints = CA:FALSE
+keyUsage = digitalSignature,keyEncipherment
+extendedKeyUsage = serverAuth
+subjectAltName = @alt_names
+
+[ alt_names ]
+DNS.1 = localhost
+IP.1  = 127.0.0.1
+IP.2  = 172.20.10.5
+IP.3  = 172.20.10.4
+IP.4  = 172.20.10.10
+IP.5  = 10.51.184.118

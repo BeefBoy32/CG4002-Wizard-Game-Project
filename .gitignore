@@ -25,3 +25,6 @@ Comms/bleTest/Lib/site-packages/paho_mqtt-1.6.1-py3.10.egg-info/PKG-INFO
 Comms/bleTest/Lib/site-packages/paho_mqtt-1.6.1-py3.10.egg-info/requires.txt
 Comms/bleTest/Lib/site-packages/paho_mqtt-1.6.1-py3.10.egg-info/SOURCES.txt
 Comms/bleTest/Lib/site-packages/paho_mqtt-1.6.1-py3.10.egg-info/top_level.txt
+certs/**                # ignore everything in certs
+!certs/**/server_san.cnf
+!certs/**/client_san.cnf
