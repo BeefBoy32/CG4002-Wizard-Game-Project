@@ -6,32 +6,39 @@
     <title>Wizard Game Live</title>
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <style>
+        :root {
+            --p1: #1b9e3f;
+            --p2: #2563eb;
+            --bg1: #f7f9fc;
+            --bg2: #eef2f7;
+            --card: #ffffff;
+            --border: #e5e7eb;
+        }
+
         body {
             font-family: system-ui, sans-serif;
             margin: 24px;
+            background:
+                radial-gradient(1200px 600px at -10% -10%, var(--bg2), transparent 60%),
+                radial-gradient(1200px 600px at 110% 10%, var(--bg2), transparent 60%),
+                var(--bg1);
         }
 
         .row {
             display: flex;
             gap: 24px;
             align-items: center;
+            flex-wrap: wrap;
         }
 
         .card {
             padding: 16px;
-            border: 1px solid #ddd;
+            border: 1px solid var(--border);
             border-radius: 12px;
             min-width: 240px;
-        }
-
-        .cell {
-            min-height: 64px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border: 1px dashed #ccc;
-            border-radius: 10px;
-            font-weight: 700;
+            box-shadow: 0 6px 16px rgba(0, 0, 0, .06);
+            background: var(--card);
+            flex: 1 1 auto;
         }
 
         .spell {
@@ -60,8 +67,92 @@
             font-size: 76px;
         }
 
+        .cell {
+            position: relative;
+            min-height: 88px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 1px dashed #ccc;
+            border-radius: 10px;
+            font-weight: 700;
+            background: #fafafa;
+        }
+
+        .cell.pid1 {
+            color: var(--p1);
+            border-color: color-mix(in srgb, var(--p1) 40%, #ccc);
+        }
+
+        .cell.pid2 {
+            color: var(--p2);
+            border-color: color-mix(in srgb, var(--p2) 40%, #ccc);
+        }
+
+        .cell.pid1::after,
+        .cell.pid2::after {
+            content: attr(data-badge);
+            position: absolute;
+            top: 6px;
+            left: 6px;
+            font-size: 10px;
+            font-weight: 800;
+            color: #fff;
+            padding: 2px 6px;
+            border-radius: 999px;
+        }
+
+        .cell.pid1::after {
+            background: var(--p1);
+        }
+
+        .cell.pid2::after {
+            background: var(--p2);
+        }
+
+        /* Battlefield header */
+        .bf-head {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            padding-bottom: 6px;
+        }
+
+        .side {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .chip {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            height: 22px;
+            min-width: 28px;
+            padding: 0 8px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 700;
+            color: #fff;
+        }
+
+        .chip-p1 {
+            background: var(--p1);
+        }
+
+        .chip-p2 {
+            background: var(--p2);
+        }
+
+        .hp {
+            font-size: 28px;
+        }
+
+        /* status colors */
         .ok {
-            color: #1b9e3f;
+            color: var(--p1);
         }
 
         .warn {
@@ -81,7 +172,7 @@
         }
 
         .dot.on {
-            background: #1b9e3f;
+            background: var(--p1);
         }
 
         .dot.off {
@@ -93,18 +184,108 @@
             font-size: 12px;
         }
 
-        .p1 {
-            color: #1b9e3f;
+        /* Wizards */
+        #wizards {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin: 12px 0 -6px;
         }
 
-        .p2 {
-            color: #2563eb;
+        .wizard {
+            font-size: 40px;
+            line-height: 1;
+            filter: drop-shadow(0 2px 4px rgba(0, 0, 0, .2));
+            opacity: .9;
+        }
+
+        .wizard.casting {
+            animation: cast 420ms ease-out;
+        }
+
+        @keyframes cast {
+            0% {
+                transform: translateY(0) rotate(0);
+                text-shadow: 0 0 0 #ffd000;
+            }
+
+            35% {
+                transform: translateY(-4px) rotate(-6deg);
+                text-shadow: 0 0 10px #ffd000;
+            }
+
+            100% {
+                transform: translateY(0) rotate(0);
+                text-shadow: 0 0 0 #ffd000;
+            }
+        }
+
+        /* Overlay */
+        #overlay {
+            position: fixed;
+            inset: 0;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            background: rgba(6, 8, 20, .72);
+            z-index: 9999;
+            backdrop-filter: blur(2px);
+        }
+
+        #overlay.show {
+            display: flex !important;
+        }
+
+        #overlayCard {
+            background: #111;
+            color: #fff;
+            padding: 32px 40px;
+            border-radius: 18px;
+            text-align: center;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, .35);
+        }
+
+        #overlayTitle {
+            font-size: clamp(40px, 6vw, 72px);
+            font-weight: 900;
+            letter-spacing: .4px;
+        }
+
+        #overlaySub {
+            font-size: 14px;
+            opacity: .75;
+            margin-top: 8px;
+        }
+
+        .winner-1 {
+            color: var(--p1);
+        }
+
+        .winner-2 {
+            color: var(--p2);
+        }
+
+        @keyframes pop {
+            0% {
+                transform: scale(.96);
+                opacity: 0
+            }
+
+            100% {
+                transform: scale(1);
+                opacity: 1
+            }
+        }
+
+        #overlay.show #overlayCard {
+            animation: pop 160ms ease-out;
         }
     </style>
 </head>
 
 <body>
     <h1>Wizard Game — Live</h1>
+
     <div class="row">
         <div class="card">
             <div><span id="connDot" class="dot off"></span><strong>Broker</strong> <span
@@ -138,17 +319,31 @@
             <div>Last Spell — Wand 2</div>
             <div id="spell2" class="spell">U</div>
         </div>
-
     </div>
+
     <div class="row" style="margin-top:24px;">
         <div class="card" style="flex:1;">
-            <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div id="wizards">
+                <div id="wiz1" class="wizard" title="Player 1">🧙‍♂️</div>
+                <div id="wiz2" class="wizard" title="Player 2">🧙‍♂️</div>
+            </div>
+
+            <div class="bf-head">
+                <div class="side">
+                    <span class="chip chip-p1">P1</span>
+                    <span class="side-name">Player 1</span>
+                </div>
                 <strong>Battlefield</strong>
-                <div>Health:
-                    <span id="p1hp" class="spell ok" style="font-size:28px;">3</span> :
-                    <span id="p2hp" class="spell ok" style="font-size:28px;">3</span>
+                <div class="side">
+                    <span class="side-name">Player 2</span>
+                    <span class="chip chip-p2">P2</span>
+                    <span class="health">Health:
+                        <span id="p1hp" class="spell ok hp">3</span> :
+                        <span id="p2hp" class="spell ok hp">3</span>
+                    </span>
                 </div>
             </div>
+
             <div id="board" style="display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-top:12px;">
                 <div class="cell"></div>
                 <div class="cell"></div>
@@ -157,6 +352,25 @@
                 <div class="cell"></div>
             </div>
             <div id="result" class="muted" style="margin-top:8px;"></div>
+        </div>
+    </div>
+
+    <div id="overlay">
+        <div id="overlayCard">
+            <div id="overlayTitle">Game Over</div>
+            <div id="overlaySub">Press ESC to close</div>
+        </div>
+    </div>
+
+    <div id="overlay" style="
+      position:fixed; inset:0; display:none;
+      align-items:center; justify-content:center;
+      background:rgba(6,8,20,.72); z-index:9999; backdrop-filter:blur(2px);">
+        <div id="overlayCard" style="
+        background:#111; color:#fff; padding:32px 40px;
+        border-radius:18px; text-align:center; box-shadow:0 20px 60px rgba(0,0,0,.35);">
+            <div id="overlayTitle" style="font-size:clamp(40px,6vw,72px); font-weight:900;">Game Over</div>
+            <div id="overlaySub" style="font-size:14px; opacity:.75; margin-top:8px;">Press ESC to close</div>
         </div>
     </div>
 

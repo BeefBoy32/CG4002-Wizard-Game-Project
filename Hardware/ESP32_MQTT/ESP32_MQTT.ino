@@ -363,7 +363,7 @@ void setup() {
   attachInterrupt(digitalPinToInterrupt(MPU_INT_PIN), dmpDataReady, RISING);
   
   setup_wifi();
-  mqttClient.setKeepAlive(3);
+  mqttClient.setKeepAlive(1);
   mqttClient.setWill(TOP_STATUS, 1, true, (String("{\"ready\":") + String("false") + String("}")).c_str()); // topic, message, retain, QoS
   mqttClient.setServer(mqtt_server, mqtt_port);
   mqttClient.setClientId(WAND_CLIENT);
@@ -479,13 +479,14 @@ void loop() {
         ledControl.on_spell_light(charToColour(spellType), calcStrength(spinCount));
       }
       if (accelReal.y / ACCEL_SENS <= -0.65 && calcStrength(spinCount) >= 2) {
+        ledControl.off_light();
         int strength = calcStrength(spinCount);
         Serial.print("Thrust detected, Strength: ");
         Serial.println(strength);
         drawingMode = true;
         spinCount = 0;
-        ledControl.off_light();
         publish_cast_data(strength);
+        delay(1000);
         mpu.resetFIFO();
         mpuInterrupt = false;
         mpuCount = 0;

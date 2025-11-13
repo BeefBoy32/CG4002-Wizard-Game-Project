@@ -18,6 +18,12 @@ const TOP = {
     GAME_END: "u96/game_end",
 };
 
+// prettier spell symbols
+const GLYPH = { W: "〰️", C: "⭕", S: "⬜", T: "🔺", Z: "⚡", I: "♾️", U: "·" };
+const NAME = { W: "Wave", C: "Circle", S: "Square", T: "Triangle", Z: "Zigzag", I: "Infinity", U: "Unknown" };
+const glyphFor = (l) => GLYPH[l] ?? "·";
+
+
 // ---------- helpers ----------
 const $ = (id) => document.getElementById(id);
 
@@ -73,8 +79,9 @@ function renderBoard(lanes = []) {
             const strength = slot[2];
             const lvl = toStrengthLevel(strength);
 
-            cell.textContent = `${letter}`;
-            cell.className = `cell ${playerClass(pid)} spell-lv${lvl}`;
+            cell.textContent = glyphFor(letter);                       // show symbol
+            cell.title = `${NAME[letter] || "Spell"} • Strength: ${strength ?? lvl}`;
+            cell.className = `cell ${playerClass(pid)} spell-lv${lvl}`; // size still from strength
             cell.style.transition = "font-size 120ms ease";
         } else {
             cell.textContent = "";
@@ -84,6 +91,18 @@ function renderBoard(lanes = []) {
     }
 }
 
+function showOverlay(message, winner) {
+    const ov = document.getElementById("overlay");
+    const title = document.getElementById("overlayTitle");
+    const sub = document.getElementById("overlaySub");
+    title.textContent = message || "Game Over";
+    title.classList.remove("winner-1", "winner-2");
+    if (winner === 1 || winner === 2) title.classList.add(`winner-${winner}`);
+    sub.textContent = "Press ESC to close";
+    ov.classList.add("show");
+}
+function hideOverlay() { document.getElementById("overlay")?.classList.remove("show"); }
+document.addEventListener("keydown", (e) => { if (e.key === "Escape") hideOverlay(); });
 
 
 // ---------- main ----------
@@ -149,13 +168,19 @@ document.addEventListener("DOMContentLoaded", () => {
                 setBatt($("batt2"), js.percent);
                 break;
 
-            case TOP.W1_SPELL:
-                $("spell1").textContent = js.spell_type || "U";
+            case TOP.W1_SPELL: {
+                const L = js.spell_type || "U";
+                $("spell1").textContent = glyphFor(L);
+                $("spell1").title = NAME[L] || "Spell";
                 break;
+            }
 
-            case TOP.W2_SPELL:
-                $("spell2").textContent = js.spell_type || "U";
+            case TOP.W2_SPELL: {
+                const L = js.spell_type || "U";
+                $("spell2").textContent = glyphFor(L);
+                $("spell2").title = NAME[L] || "Spell";
                 break;
+            }
 
             case TOP.GAME:
                 // { p1_health, p2_health, lanes:[...], ts }
@@ -165,11 +190,13 @@ document.addEventListener("DOMContentLoaded", () => {
                 $("result").textContent = "";
                 break;
 
-            case TOP.GAME_END:
-                $("result").textContent = js?.winner
-                    ? `Game Over — Player ${js.winner} wins!`
-                    : "Game Over";
+            case TOP.GAME_END: {
+                const winner = js?.winner;
+                const msg = winner ? `Game Over — Player ${winner} wins!` : "Game Over";
+                document.getElementById("result").textContent = msg; // keep small text if you want
+                showOverlay(msg, winner);
                 break;
+            }
         }
     });
 });
